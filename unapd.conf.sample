@@ -1,0 +1,10 @@
+// Sample UNAP daemon configuration file.
+
+// Log file location.
+log-path "/var/log/unapd.log"
+
+// Log level, 0..4. Set to 0 to disable logging.
+log-level 3
+
+// Enable running as a daemon.
+daemon true

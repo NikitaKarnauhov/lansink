@@ -1,0 +1,19 @@
+package unap;
+
+message Packet {
+	enum Kind {
+		DATA = 0;
+		PAUSE = 1;
+		UNPAUSE = 2;
+		STOP = 3;
+	}
+
+	required fixed32 version = 1;
+	required fixed64 stream = 2;
+	required Kind kind = 3;
+	required fixed32 channels = 4;
+	required fixed32 rate = 5;
+	required string format = 6;
+	required fixed64 timestamp = 7;
+	required bytes samples = 8;
+}
