@@ -11,6 +11,8 @@
 #include <string>
 #include <stdexcept>
 
+#include <string.h>
+
 #include "utils.h"
 
 template<typename _Base>
@@ -25,5 +27,22 @@ public:
 
 using RuntimeError = Exception<std::runtime_error>;
 using LogicError = Exception<std::runtime_error>;
+
+class SystemError : public RuntimeError {
+public:
+    template<typename... Args>
+    SystemError(const char *_strFormat, Args... _args) :
+        RuntimeError((std::string(_strFormat) + ": %s").c_str(), _args..., strerror(errno)),
+        m_nError(errno)
+    {
+    }
+
+    int getError() const {
+        return m_nError;
+    }
+
+private:
+    int m_nError;
+};
 
 #endif /* EXCEPTION_H_ */

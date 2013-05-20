@@ -136,13 +136,17 @@ const Settings &SettingsParser::get() const {
     return m_pImpl->settings;
 }
 
-void SettingsParser::parse_file(const std::string &_strFIlename) {
-    std::wifstream is(_strFIlename);
+void SettingsParser::parse_file(const std::string &_strFilename) {
+    std::wifstream is(_strFilename);
 
     if (is.bad())
-        throw std::runtime_error(std::string("Cannot open config file: ") + _strFIlename);
+        throw std::runtime_error(std::string("Cannot open config file: ") + _strFilename.c_str());
 
-    m_pImpl->parse(is);
+    try {
+        m_pImpl->parse(is);
+    } catch (std::exception &e) {
+        throw RuntimeError("Failed parsing %s: %s", _strFilename.c_str(), e.what());
+    }
 }
 
 void SettingsParser::parse_option(const std::string &_strOption, const std::string &_strValue) {

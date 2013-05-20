@@ -25,10 +25,10 @@
 #include "exception.h"
 
 struct ALSA {
-    class Exception : public RuntimeError {
+    class Error : public RuntimeError {
     public:
         template<typename... Args>
-        Exception(int _nError, const char *_strFormat, Args... _args) :
+        Error(int _nError, const char *_strFormat, Args... _args) :
             RuntimeError((std::string(_strFormat) + ": %s").c_str(), _args..., snd_strerror(_nError)),
             m_nError(_nError)
         {

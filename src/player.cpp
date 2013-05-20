@@ -226,7 +226,7 @@ void Player::Impl::run() {
                         nFrames = nFrames > (snd_pcm_sframes_t)m_cPeriodSize ? m_cPeriodSize : nFrames;
                         _add_samples(nFrames, true);
                     }
-                } catch (ALSA::Exception &e) {
+                } catch (ALSA::Error &e) {
                     m_pLog->log(llWarning, e.what());
                     nLastError = e.getError();
                     continue;

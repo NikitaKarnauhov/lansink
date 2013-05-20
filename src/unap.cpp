@@ -8,6 +8,7 @@
 #include "unap.h"
 #include "unap.pb.h"
 #include "formats.h"
+#include "exception.h"
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -301,7 +302,7 @@ void UNAP::_send_packet() {
             break;
 
         if (errno != ECONNREFUSED)
-            throw std::runtime_error(strerror(errno));
+            throw SystemError("send()");
 
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
@@ -316,7 +317,7 @@ void UNAP::connect() {
     m_nSocket = socket(PF_INET, SOCK_DGRAM, 0);
 
     if (m_nSocket < 0)
-        throw std::runtime_error(strerror(errno));
+        throw SystemError("socket()");
 
     name.sin_family = AF_INET;
     name.sin_port = htons(this->nPort);
@@ -324,12 +325,12 @@ void UNAP::connect() {
     struct hostent *pHost = gethostbyname(this->strHost.c_str());
 
     if (!pHost)
-        throw std::runtime_error(strerror(errno));
+        throw SystemError("gethostbyname()");
 
     name.sin_addr = *(struct in_addr *)pHost->h_addr;
 
     if (::connect(m_nSocket, (struct sockaddr *)&name, sizeof(name)) < 0)
-        throw std::runtime_error(strerror(errno));
+        throw SystemError("connect()");
 }
 
 const std::vector<unsigned int> &UNAP::get_format_values() {

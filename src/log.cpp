@@ -6,6 +6,7 @@
  */
 
 #include "log.h"
+#include "exception.h"
 
 #include <map>
 #include <mutex>
@@ -46,7 +47,7 @@ void Log::Impl::open(const std::string &_strFilename) {
 
         if (pStream->bad()) {
             m_streams.erase(_strFilename);
-            throw std::runtime_error(std::string("Cannot open log file: ") + _strFilename);
+            throw RuntimeError("Cannot open log file: %s", _strFilename.c_str());
         }
     }
 }

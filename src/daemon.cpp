@@ -86,7 +86,7 @@ void _parse_options(int _nArgs, char *const _pArgs[]) {
 
         if (c == -1) {
             if (optind < _nArgs)
-                throw std::runtime_error(std::string("Redundant argument: ") + _pArgs[optind]);
+                throw RuntimeError("Redundant argument: %s", _pArgs[optind]);
             break;
         }
 
@@ -167,12 +167,12 @@ void _main(Log &_log) {
     hints.ai_flags = AI_PASSIVE;
 
     if (getaddrinfo(NULL, strPort.c_str(), &hints, &serverinfo) < 0)
-        throw std::runtime_error(strerror(errno));
+        throw SystemError("getaddrinfo()");
 
     const int nSocket = socket(serverinfo->ai_family, serverinfo->ai_socktype, serverinfo->ai_protocol);
 
     if (bind(nSocket, serverinfo->ai_addr, serverinfo->ai_addrlen) < 0)
-        throw std::runtime_error(strerror(errno));
+        throw SystemError("bind()");
 
     freeaddrinfo(serverinfo);
 
@@ -189,7 +189,7 @@ void _main(Log &_log) {
 
     while (true) {
         if (poll(&fd, 1, 1000) < 0)
-            throw std::runtime_error(strerror(errno));
+            throw SystemError("poll()");
 
         if (fd.revents & POLLIN) {
             struct sockaddr sender;
@@ -199,7 +199,7 @@ void _main(Log &_log) {
             char strSender[128];
 
             if (nPacketSize < 0)
-                throw std::runtime_error(strerror(errno));
+                throw SystemError("recvfrom()");
 
             inet_ntop(sender.sa_family, &((struct sockaddr_in &)sender).sin_addr,
                     strSender, sizeof(strSender));
