@@ -192,6 +192,7 @@ void Player::Impl::run() {
                     if (bEmpty) {
                         if (cRetry > c_cMaxRetries) {
                             m_pLog->info("Dropping stream %llu", m_cStreamId);
+                            ALSA::close(m_pPcm);
                             break;
                         }
 
