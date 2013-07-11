@@ -68,6 +68,7 @@ struct ALSA {
     static int recover(snd_pcm_t *_pPcm, int _nError, bool _bSilent);
     static int wait(snd_pcm_t *_pPcm, int _nTimeout);
     static snd_pcm_sframes_t avail_update(snd_pcm_t *_pPcm);
+    static int pause(snd_pcm_t *_pPcm, bool _bEnable);
 
     static unsigned int format_physical_width(snd_pcm_format_t _format);
 };

@@ -180,6 +180,15 @@ snd_pcm_sframes_t ALSA::avail_update(snd_pcm_t *_pPcm) {
     return nResult;
 }
 
+int ALSA::pause(snd_pcm_t *_pPcm, bool _bEnable) {
+    const int nResult = snd_pcm_pause(_pPcm, _bEnable);
+
+    if (nResult < 0)
+        throw Error(nResult, "Cannot %s audio device", _bEnable ? "pause" : "unpause");
+
+    return nResult;
+}
+
 unsigned int ALSA::format_physical_width(snd_pcm_format_t _format) {
     const int nResult = snd_pcm_format_physical_width(_format);
 
