@@ -50,6 +50,7 @@ void _print_usage(std::ostream &_os) {
             "  -L, --log-level         Set log verbosity level (0 to 4, use 0 to disable logging).\n" <<
             "  -d, --daemon            Run as a daemon.\n" <<
             "  -n, --no-daemon         Don't run as a daemon, display log messages (default).\n" <<
+            "  -p, --pid-path          PID file location.\n" <<
             "" << std::flush;
 }
 
@@ -71,12 +72,13 @@ void _parse_options(int _nArgs, char *const _pArgs[]) {
             {"log-level", required_argument, 0, 'L'},
             {"daemon", 0, 0, 'd'},
             {"no-daemon", 0, 0, 'n'},
+            {"pid-path", 0, 0, 'p'},
             {0, 0, 0, 0}
     };
 
-    const char *strOptions = "hvc:l:L:dn";
     int nArgs = _nArgs;
     char *const *pArgs = _pArgs;
+    const char *strOptions = "hvc:l:L:dnp:";
     int nOption = 0;
     SettingsParser sp;
 

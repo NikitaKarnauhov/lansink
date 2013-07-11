@@ -14,6 +14,8 @@
 #include <locale>
 #include <memory>
 
+#include <stdio.h>
+
 #include "lexer.h"
 #include "exception.h"
 
@@ -41,7 +43,8 @@ struct SettingsParser::Impl {
     };
 
     std::map<std::wstring, std::string *, LessIC> stringSettings{
-        {L"log-path", &settings.strLogPath}
+        {L"log-path", &settings.strLogPath},
+        {L"pid-path", &settings.strPIDPath}
     };
 
     void parse(std::wistream &_is);

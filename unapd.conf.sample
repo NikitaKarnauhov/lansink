@@ -3,6 +3,9 @@
 // Log file location.
 log-path "/var/log/unapd.log"
 
+// PID file location.
+pid-path "/var/run/unapd.pid"
+
 // Log level, 0..4. Set to 0 to disable logging.
 log-level 3
 
