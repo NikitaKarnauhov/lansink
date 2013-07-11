@@ -208,10 +208,28 @@ void _main(Log &_log) {
             pPlayer->play(packet);
         }
     }
+
+static
+bool _write_pid(Log &_log) {
+    // Specify empty PID path to disable writing PID.
+    if (g_settings.strPIDPath.empty())
+        return false;
+
+    std::ofstream os(g_settings.strPIDPath);
+
+    if (!os.good())
+        throw RuntimeError("Cannot write PID file: %s", g_settings.strPIDPath.c_str());
+
+    os << getpid() << std::endl;
+    _log.info("PID file written to %s", g_settings.strPIDPath.c_str());
+
+    return true;
+}
 }
 
 int main(int _nArgs, char *const _pArgs[]) {
     Log log("");
+    bool bPIDWritten = false;
 
     try {
         _parse_options(_nArgs, _pArgs);
@@ -228,11 +246,15 @@ int main(int _nArgs, char *const _pArgs[]) {
                 throw SystemError("daemon()");
         }
 
+        bPIDWritten = _write_pid(log);
         _main(log);
     } catch (std::exception &e) {
         log.log(llError, e.what());
         return EXIT_FAILURE;
     }
+
+    if (bPIDWritten)
+        unlink(g_settings.strPIDPath.c_str());
 
     return EXIT_SUCCESS;
 }
