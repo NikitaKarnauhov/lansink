@@ -31,6 +31,21 @@ public:
     void log(LogLevel _level, const std::string &_strMessage);
     void log(LogLevel _level, const char *_strFormat, ...);
 
+#define LOG_LEVEL(_NAME, _LEVEL)                        \
+    void _NAME(const std::string &_strMessage) {        \
+        log(_LEVEL, _strMessage);                      \
+    }                                                   \
+                                                        \
+    template<typename... Args>                          \
+    void _NAME(const char *_strFormat, Args... _args) { \
+        log(_LEVEL, _strFormat, _args...);             \
+    }
+
+    LOG_LEVEL(error, llError);
+    LOG_LEVEL(warning, llWarning);
+    LOG_LEVEL(info, llInfo);
+    LOG_LEVEL(debug, llDebug);
+
 private:
     class Impl;
     Impl *m_pImpl;
