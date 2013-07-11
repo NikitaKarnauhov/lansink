@@ -321,9 +321,6 @@ bool Lexer::_read_string(Token &_tok) {
     _tok.kind = TK::String;
     m_is.get(); // Quote.
 
-    std::wstring s;
-    std::wstring charsRead;
-
     while (m_is.good() && m_is.peek() != L'"')
         if (!_read_char(_tok))
             return false;
