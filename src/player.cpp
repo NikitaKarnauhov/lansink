@@ -191,7 +191,7 @@ void Player::Impl::run() {
                     // Sleep until recovered.
                     if (bEmpty) {
                         if (cRetry > c_cMaxRetries) {
-                            m_pLog->log(llInfo, "Dropping stream %llu", m_cStreamId);
+                            m_pLog->info("Dropping stream %llu", m_cStreamId);
                             break;
                         }
 
@@ -202,7 +202,7 @@ void Player::Impl::run() {
                     }
 
                     // Try to recover if error occurred.
-                    m_pLog->log(llInfo, "Recovering...");
+                    m_pLog->info("Recovering...");
 
                     ALSA::recover(m_pPcm, nLastError, true);
                     nLastError = 0;
