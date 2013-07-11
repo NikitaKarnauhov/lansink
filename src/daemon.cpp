@@ -31,6 +31,7 @@
 #include <errno.h>
 #include <string.h>
 #include <getopt.h>
+#include <signal.h>
 
 #include <alsa/asoundlib.h>
 
@@ -39,6 +40,9 @@
 #include "alsa_wrapper.h"
 #include "player.h"
 #include "settings.h"
+
+// Signal flags.
+static int g_nExitSignal = 0;
 
 static
 void _print_usage(std::ostream &_os) {
@@ -81,6 +85,8 @@ void _parse_options(int _nArgs, char *const _pArgs[]) {
     int nOption = 0;
     SettingsParser sp;
     std::map<std::string, std::string> kvs;
+
+    // TODO: build std::map<int, std::string>
 
     // Handle --help, --version and --config-path options.
     while (true) {
@@ -174,40 +180,49 @@ void _main(Log &_log) {
 //
 //    return EXIT_SUCCESS;
 
-    while (true) {
-        if (poll(&fd, 1, 1000) < 0)
-            throw SystemError("poll()");
+    do {
+        try {
+            if (poll(&fd, 1, 1000) < 0)
+                throw SystemError("poll()");
 
-        if (fd.revents & POLLIN) {
-            struct sockaddr sender;
-            socklen_t sendsize = sizeof(sender);
-            bzero(&sender, sizeof(sender));
-            const int nPacketSize = recvfrom(fd.fd, pBuf.get(), cBufferSize, 0, &sender, &sendsize);
-            char strSender[128];
+            if (fd.revents & POLLIN) {
+                struct sockaddr sender;
+                socklen_t sendsize = sizeof(sender);
+                bzero(&sender, sizeof(sender));
+                const int nPacketSize = recvfrom(fd.fd, pBuf.get(), cBufferSize, 0, &sender, &sendsize);
+                char strSender[128];
 
-            if (nPacketSize < 0)
-                throw SystemError("recvfrom()");
+                if (nPacketSize < 0)
+                    throw SystemError("recvfrom()");
 
-            inet_ntop(sender.sa_family, &((struct sockaddr_in &)sender).sin_addr,
-                    strSender, sizeof(strSender));
+                inet_ntop(sender.sa_family, &((struct sockaddr_in &)sender).sin_addr,
+                        strSender, sizeof(strSender));
 
-            unap::Packet &packet = *packets.emplace(packets.end());
+                unap::Packet &packet = *packets.emplace(packets.end());
 
-            if (!packet.ParseFromArray(pBuf.get(), nPacketSize)) {
-                std::cerr << "Broken packet." << std::endl;
-                continue;
+                if (!packet.ParseFromArray(pBuf.get(), nPacketSize)) {
+                    _log.debug("Broken packet.");
+                    continue;
+                }
+
+                Player *pPlayer = Player::get(packet, _log);
+
+                if (!pPlayer->is_prepared()) {
+                    pPlayer->init(packet);
+                    pPlayer->run();
+                }
+
+                pPlayer->play(packet);
             }
-
-            Player *pPlayer = Player::get(packet, _log);
-
-            if (!pPlayer->is_prepared()) {
-                pPlayer->init(packet);
-                pPlayer->run();
-            }
-
-            pPlayer->play(packet);
+        } catch (SystemError &se) {
+            if (se.getError() != EINTR)
+                throw;
         }
-    }
+
+        if (g_nExitSignal != 0)
+            _log.info("Got signal %d, exiting gracefully.", g_nExitSignal);
+    } while (g_nExitSignal == 0);
+}
 
 static
 bool _write_pid(Log &_log) {
@@ -225,6 +240,27 @@ bool _write_pid(Log &_log) {
 
     return true;
 }
+
+static
+void _handle_signal(int _nSignal, siginfo_t *_pSigInfo, void *_pContext) {
+    g_nExitSignal = _nSignal;
+}
+
+static
+void _init_signals() {
+    struct sigaction action = {};
+    const int exitSignals[]{
+            SIGTERM, SIGINT, SIGPIPE, SIGALRM, SIGUSR1, SIGUSR2, SIGPOLL,
+            SIGPROF, SIGVTALRM
+    };
+
+    action.sa_sigaction = &_handle_signal;
+    action.sa_flags = SA_SIGINFO;
+
+    for (int nSignal : exitSignals)
+        if (sigaction(nSignal, &action, NULL) < 0)
+            throw SystemError("sigaction()");
+
 }
 
 int main(int _nArgs, char *const _pArgs[]) {
@@ -246,6 +282,7 @@ int main(int _nArgs, char *const _pArgs[]) {
                 throw SystemError("daemon()");
         }
 
+        _init_signals();
         bPIDWritten = _write_pid(log);
         _main(log);
     } catch (std::exception &e) {
