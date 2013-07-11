@@ -139,8 +139,8 @@ const Settings &SettingsParser::get() const {
 void SettingsParser::parse_file(const std::string &_strFilename) {
     std::wifstream is(_strFilename);
 
-    if (is.bad())
-        throw std::runtime_error(std::string("Cannot open config file: ") + _strFilename.c_str());
+    if (!is.good())
+        throw RuntimeError("Cannot open config file: %s", _strFilename.c_str());
 
     try {
         m_pImpl->parse(is);
