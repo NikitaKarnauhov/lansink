@@ -491,7 +491,7 @@ Lexer::Tokens::iterator Lexer::_read() {
         }
     }
 
-    return m_tokens.insert(Token(TK::Error, m_pos, L"", m_nLine, m_nCol)).first;
+    return m_tokens.insert(Token(m_is.good() ? TK::Error : TK::EndOfFile, m_pos, L"", m_nLine, m_nCol)).first;
 }
 
 Lexer::iterator Lexer::begin() {
