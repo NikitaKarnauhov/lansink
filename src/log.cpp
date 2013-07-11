@@ -45,7 +45,7 @@ void Log::Impl::open(const std::string &_strFilename) {
         pStream = _strFilename.empty() ? &std::cerr :
                 new std::ofstream(_strFilename, std::ios::app);
 
-        if (pStream->bad()) {
+        if (!pStream->good()) {
             m_streams.erase(_strFilename);
             throw RuntimeError("Cannot open log file: %s", _strFilename.c_str());
         }
