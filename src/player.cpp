@@ -18,12 +18,14 @@
 #include "formats.h"
 
 struct Samples {
+    unap::Packet_Kind kind;
     uint64_t cTimestamp;
     std::string data;
     size_t cOffset;
 
     Samples(unap::Packet &_packet) :
-        cTimestamp(_packet.timestamp()), data(std::move(*_packet.mutable_samples())), cOffset(0)
+        kind(_packet.kind()), cTimestamp(_packet.timestamp()),
+        data(std::move(*_packet.mutable_samples())), cOffset(0)
     {
     }
 
@@ -54,7 +56,7 @@ public:
     Impl(uint64_t _cStreamId, Log &_log) :
         m_cStreamId(_cStreamId), m_pPcm(nullptr), m_cBufferSize(4096), m_cPeriodSize(256),
         m_format(SND_PCM_FORMAT_UNKNOWN), m_cRate(0), m_cChannelCount(0), m_cFrameBytes(0),
-        m_cPosition(0), m_pLog(&_log), m_bReady(false) {}
+        m_cPosition(0), m_pLog(&_log), m_bReady(false), m_bPaused(false), m_bClosed(false) {}
 
     ~Impl() {
         ALSA::drain(m_pPcm);
@@ -86,6 +88,8 @@ private:
     mutable std::mutex m_mutex;
     Log *m_pLog;
     bool m_bReady;
+    bool m_bPaused;
+    bool m_bClosed;
 
     typedef std::map<uint64_t, Player *> Players;
     static Players s_players;
@@ -136,9 +140,15 @@ void Player::Impl::init(unap::Packet &_packet) {
 void Player::Impl::play(unap::Packet &_packet) {
     std::lock_guard<std::mutex> lock(m_mutex);
 
-    m_pLog->log(llDebug, "version = %u; stream = %llu; kind = %d, format = %s, channels = %u; rate = %u; timestamp = %llu; frames = %u",
+    if (m_bClosed)
+        return;
+
+    m_pLog->debug("version = %u; stream = %llu; kind = %d, format = %s, channels = %u; rate = %u; timestamp = %llu; frames = %u",
             _packet.version(), _packet.stream(), _packet.kind(), _packet.format().c_str(),
             _packet.channels(), _packet.rate(), _packet.timestamp(), _packet.samples().size());
+
+    if (_packet.kind() != unap::Packet_Kind_DATA && m_cPosition != 0)
+        _packet.set_timestamp(m_cPosition);
 
     if (m_cPosition <= _packet.timestamp()) {
         m_queue.insert(new Samples(_packet));
@@ -176,8 +186,27 @@ void Player::Impl::run() {
             int nLastError = 0;
             constexpr size_t c_cMaxRetries = 1000;
             size_t cRetry = 0;
+            bool bPrevPaused = false;
 
             while (true) {
+                {
+                    std::lock_guard<std::mutex> lock(m_mutex);
+
+                    if (m_bPaused != bPrevPaused) {
+                        m_pLog->info("%s stream %llu", m_bPaused ? "Pausing" : "Unpausing",
+                                m_cStreamId);
+                        ALSA::pause(m_pPcm, m_bPaused);
+                    }
+
+                    if (m_bClosed) {
+                        m_pLog->info("Closing stream %llu", m_cStreamId);
+                        ALSA::close(m_pPcm);
+                        break;
+                    }
+
+                    bPrevPaused = m_bPaused;
+                }
+
                 if (nLastError < 0) {
                     bool bEmpty = false;
 
@@ -243,6 +272,36 @@ void Player::Impl::_add_samples(size_t _cSamples, bool _bStopWhenEmpty) {
     const size_t cEnd = m_cPosition + _cSamples;
 
     assert(m_cFrameBytes > 0);
+
+    // Handle control packets.
+    for (auto iSamples = m_queue.begin(); iSamples != m_queue.end();) {
+        Samples *pSamples = *iSamples;
+
+        if (pSamples->kind == unap::Packet_Kind_DATA) {
+            ++iSamples;
+            continue;
+        }
+
+        switch (pSamples->kind) {
+            case unap::Packet_Kind_PAUSE:
+                m_bPaused = true;
+                break;
+            case unap::Packet_Kind_UNPAUSE:
+                m_bPaused = false;
+                break;
+            case unap::Packet_Kind_STOP:
+                m_bClosed = true;
+                return;
+            default:
+                throw LogicError("Unexpected packet kind %d", pSamples->kind);
+                break;
+        }
+
+        iSamples = m_queue.erase(iSamples);
+    }
+
+    if (m_bPaused)
+        return;
 
     while (m_cPosition < cEnd) {
         Samples *pSamples = m_queue.empty() ? nullptr : *m_queue.begin();

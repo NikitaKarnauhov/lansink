@@ -63,7 +63,11 @@ void UNAP::start() {
 }
 
 void UNAP::stop() {
+    if (m_status & usRunning)
+        _send_stop();
+
     m_status = usStopped;
+
     if (m_worker.joinable())
         m_worker.join();
 }
@@ -227,23 +231,109 @@ std::function<void(void)> UNAP::_make_worker() {
         if (!m_nSockWorker)
             return;
 
+        Status prev = usRunning;
+
         while (m_status & usRunning) {
+            if (prev == usRunning && m_status == usPaused)
+                _send_pause();
+            else if (prev == usPaused && m_status == usRunning)
+                _send_unpause();
+
             if (!m_queue.empty()) {
                 std::lock_guard<std::mutex> lock(m_mutex);
 
                 while (!m_queue.empty())
-                    _send_packet();
-            } else if (m_bPrepared && m_status == UNAP::usStopping && _estimate_frames() >= m_nPointer)
+                    _send_data();
+            } else if (m_bPrepared && m_status == UNAP::usStopping && _estimate_frames() >= m_nPointer) {
+                _send_stop();
                 m_status = UNAP::usStopped;
+            }
 
             char buf[1] = {0};
             write(m_nSockWorker, buf, 1);
+            prev = m_status;
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
     };
 }
 
-void UNAP::_send_packet() {
+// TODO extract common code.
+void UNAP::_send_stop() {
+    unap::Packet packet;
+    auto pBuf = std::unique_ptr<char[]>(new char[this->nMTU]);
+
+    packet.set_version(1);
+    packet.set_stream(m_cStreamId);
+    packet.set_kind(unap::Packet_Kind_STOP);
+    packet.set_channels(get_channel_count());
+    packet.set_rate(get_rate());
+    packet.set_format(m_strFormat);
+    packet.set_timestamp(_estimate_frames());
+    packet.set_samples("");
+    packet.SerializeToArray((void *)pBuf.get(), this->nMTU);
+
+    for (size_t cRetry = 0; cRetry < 5; ++cRetry) {
+        if (send(m_nSocket, (const void *)pBuf.get(), packet.ByteSize(), 0) >= 0)
+            break;
+
+        if (errno != ECONNREFUSED)
+            throw SystemError("send()");
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+}
+
+void UNAP::_send_pause() {
+    unap::Packet packet;
+    auto pBuf = std::unique_ptr<char[]>(new char[this->nMTU]);
+
+    packet.set_version(1);
+    packet.set_stream(m_cStreamId);
+    packet.set_kind(unap::Packet_Kind_PAUSE);
+    packet.set_channels(get_channel_count());
+    packet.set_rate(get_rate());
+    packet.set_format(m_strFormat);
+    packet.set_timestamp(m_nLastFrames);
+    packet.set_samples("");
+    packet.SerializeToArray((void *)pBuf.get(), this->nMTU);
+
+    for (size_t cRetry = 0; cRetry < 5; ++cRetry) {
+        if (send(m_nSocket, (const void *)pBuf.get(), packet.ByteSize(), 0) >= 0)
+            break;
+
+        if (errno != ECONNREFUSED)
+            throw SystemError("send()");
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+}
+
+void UNAP::_send_unpause() {
+    unap::Packet packet;
+    auto pBuf = std::unique_ptr<char[]>(new char[this->nMTU]);
+
+    packet.set_version(1);
+    packet.set_stream(m_cStreamId);
+    packet.set_kind(unap::Packet_Kind_UNPAUSE);
+    packet.set_channels(get_channel_count());
+    packet.set_rate(get_rate());
+    packet.set_format(m_strFormat);
+    packet.set_timestamp(m_nLastFrames);
+    packet.set_samples("");
+    packet.SerializeToArray((void *)pBuf.get(), this->nMTU);
+
+    for (size_t cRetry = 0; cRetry < 5; ++cRetry) {
+        if (send(m_nSocket, (const void *)pBuf.get(), packet.ByteSize(), 0) >= 0)
+            break;
+
+        if (errno != ECONNREFUSED)
+            throw SystemError("send()");
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+}
+
+void UNAP::_send_data() {
     assert(m_queue.front().second > m_queue.front().first);
 
     unap::Packet packet;
@@ -251,7 +341,7 @@ void UNAP::_send_packet() {
     assert(m_bPrepared);
 
     packet.set_version(1);
-    packet.set_stream(m_cStreamId); // TODO generate random ID.
+    packet.set_stream(m_cStreamId);
     packet.set_kind(unap::Packet_Kind_DATA);
     packet.set_channels(get_channel_count());
     packet.set_rate(get_rate());

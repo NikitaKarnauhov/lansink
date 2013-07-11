@@ -93,7 +93,10 @@ private:
     std::function<void(void)> _make_worker();
     void _init_descriptors();
     snd_pcm_sframes_t _estimate_frames() const;
-    void _send_packet();
+    void _send_data();
+    void _send_pause();
+    void _send_unpause();
+    void _send_stop();
 };
 
 #endif /* UNAP_H_ */
