@@ -216,8 +216,10 @@ int main(int _nArgs, char *const _pArgs[]) {
     try {
         _parse_options(_nArgs, _pArgs);
 
-        if (!g_settings.strLogPath.empty())
+        if (!g_settings.strLogPath.empty()) {
             log.open(g_settings.strLogPath);
+            log.info("Logging to %s", g_settings.strLogPath.c_str());
+        }
 
         if (g_settings.bDaemon) {
             log.close("");
