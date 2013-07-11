@@ -137,7 +137,7 @@ int ALSA::close(snd_pcm_t *_pPcm) {
     const int nResult = snd_pcm_close(_pPcm);
 
     if (nResult < 0)
-        throw Error(nResult, "Cannot drain audio device");
+        throw Error(nResult, "Cannot close audio device");
 
     return nResult;
 }
