@@ -16,6 +16,7 @@
 #include <set>
 #include <thread>
 #include <mutex>
+#include <algorithm>
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -76,15 +77,14 @@ void _parse_options(int _nArgs, char *const _pArgs[]) {
             {0, 0, 0, 0}
     };
 
-    int nArgs = _nArgs;
-    char *const *pArgs = _pArgs;
     const char *strOptions = "hvc:l:L:dnp:";
     int nOption = 0;
     SettingsParser sp;
+    std::map<std::string, std::string> kvs;
 
     // Handle --help, --version and --config-path options.
     while (true) {
-        const int c = getopt_long(nArgs, pArgs, strOptions, options, &nOption);
+        const int c = getopt_long(_nArgs, _pArgs, strOptions, options, &nOption);
 
         if (c == -1) {
             if (optind < _nArgs)
@@ -108,31 +108,16 @@ void _parse_options(int _nArgs, char *const _pArgs[]) {
             case '?':
                 _print_usage(std::cerr);
                 exit(EXIT_FAILURE);
-        }
-    }
-
-    nArgs = _nArgs;
-    pArgs = _pArgs;
-
-    // Parse remainder of options as if they were config strings.
-    while (true) {
-        const int c = getopt_long(nArgs, pArgs, strOptions, options, &nOption);
-
-        if (c == -1)
-            break;
-
-        switch (c) {
-            case 'h':
-            case 'v':
-            case 'c':
-                // Already handled in the previous loop.
-                break;
 
             default:
-                sp.parse_option(options[nOption].name, optarg);
+                kvs[std::find_if(std::begin(options), std::end(options),
+                        [c](struct option &_opt) {return _opt.val == c;})->name] = optarg;
                 break;
         }
     }
+
+    for (auto &kv : kvs)
+        sp.parse_option(kv.first, kv.second);
 
     g_settings = sp.get();
 }
