@@ -219,8 +219,12 @@ int main(int _nArgs, char *const _pArgs[]) {
         if (!g_settings.strLogPath.empty())
             log.open(g_settings.strLogPath);
 
-        if (g_settings.bDaemon)
+        if (g_settings.bDaemon) {
             log.close("");
+
+            if (daemon(true, false) != 0)
+                throw SystemError("daemon()");
+        }
 
         _main(log);
     } catch (std::exception &e) {
