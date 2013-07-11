@@ -158,8 +158,8 @@ void UNAP::drain() {
 
 void UNAP::pause() {
     assert(m_bPrepared && m_status == usRunning);
-    m_status = usPaused;
     m_nLastFrames = _estimate_frames();
+    m_status = usPaused;
     m_startTime = TimePoint();
 }
 
