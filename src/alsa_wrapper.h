@@ -43,6 +43,7 @@ struct ALSA {
     };
 
     static int open(snd_pcm_t **_ppPcm, const char *_strName, snd_pcm_stream_t _stream, int _nMode);
+    static int close(snd_pcm_t *_pPcm);
     static int hw_params_malloc(snd_pcm_hw_params_t **_ppParams);
     static int hw_params_any(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams);
     static int hw_params_set_access(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams,

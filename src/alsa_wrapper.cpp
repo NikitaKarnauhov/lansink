@@ -133,6 +133,15 @@ int ALSA::drain(snd_pcm_t *_pPcm) {
     return nResult;
 }
 
+int ALSA::close(snd_pcm_t *_pPcm) {
+    const int nResult = snd_pcm_close(_pPcm);
+
+    if (nResult < 0)
+        throw Error(nResult, "Cannot drain audio device");
+
+    return nResult;
+}
+
 snd_pcm_sframes_t ALSA::writei(snd_pcm_t *_pPcm, const void *_pBuffer,
         snd_pcm_uframes_t _cSize)
 {
