@@ -9,6 +9,7 @@
 #include "exception.h"
 
 #include <map>
+#include <list>
 #include <mutex>
 #include <chrono>
 #include <ctime>
@@ -79,24 +80,42 @@ void Log::Impl::log(LogLevel _level, const std::string &_strMessage) {
     str[c_cMaxLength - 1] = 0;
 
     std::string strHeader = std::string(str) + ": ";
+    std::string strLevel;
 
     switch (_level) {
         case llDebug:
-            strHeader += "DEBUG: ";
+            strLevel = "DEBUG: ";
             break;
         case llInfo:
-            strHeader += "INFO: ";
+            strLevel = "INFO: ";
             break;
         case llWarning:
-            strHeader += "WARNING: ";
+            strLevel = "WARNING: ";
             break;
         case llError:
-            strHeader += "ERROR: ";
+            strLevel = "ERROR: ";
             break;
     }
 
-    for (auto &stream : m_streams)
-        *stream.second << strHeader << _strMessage << std::endl;
+    std::list<std::string> messages{{strLevel + _strMessage}};
+
+    while (!messages.empty()) {
+        for (auto &stream : m_streams) {
+            *stream.second << strHeader << messages.front() << std::endl;
+
+            if (!stream.second->good()) {
+                messages.push_back(std::string("ERROR: failed writing to ") +
+                        (stream.first.empty() ? std::string("(stderr)") : stream.first));
+
+                if (!stream.first.empty())
+                    delete stream.second;
+
+                m_streams.erase(stream.first);
+            }
+        }
+
+        messages.pop_front();
+    }
 }
 
 Log::Log() : m_pImpl(new Impl) {
