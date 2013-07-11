@@ -155,7 +155,7 @@ void SettingsParser::parse_option(const std::string &_strOption, const std::stri
     const std::locale loc;
     const std::string str = _strOption + " \"" + _strValue + "\"";
 
-    std::use_facet<std::ctype<wchar_t> >(loc).widen(str.data(), str.data() + str.size(), buf.get());
+    std::use_facet<std::ctype<wchar_t> >(loc).widen(str.data(), str.data() + str.size() + 1, buf.get());
     ss << buf.get();
     m_pImpl->parse(ss);
 }
