@@ -56,6 +56,7 @@ void _print_usage(std::ostream &_os) {
             "  -d, --daemon            Run as a daemon.\n" <<
             "  -n, --no-daemon         Don't run as a daemon, display log messages (default).\n" <<
             "  -p, --pid-path          PID file location.\n" <<
+            "  -D, --alsa-device       Output ALSA device.\n" <<
             "" << std::flush;
 }
 
@@ -78,10 +79,11 @@ void _parse_options(int _nArgs, char *const _pArgs[]) {
             {"daemon", 0, 0, 'd'},
             {"no-daemon", 0, 0, 'n'},
             {"pid-path", 0, 0, 'p'},
+            {"alsa-device", 0, 0, 'D'},
             {0, 0, 0, 0}
     };
 
-    const char *strOptions = "hvc:l:L:dnp:";
+    const char *strOptions = "hvc:l:L:dnp:D:";
     int nOption = 0;
     SettingsParser sp;
     std::map<std::string, std::string> kvs;

@@ -11,3 +11,6 @@ log-level 3
 
 // Enable running as a daemon.
 daemon true
+
+// Output ALSA device.
+alsa-device "pulse"

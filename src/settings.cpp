@@ -44,7 +44,8 @@ struct SettingsParser::Impl {
 
     std::map<std::wstring, std::string *, LessIC> stringSettings{
         {L"log-path", &settings.strLogPath},
-        {L"pid-path", &settings.strPIDPath}
+        {L"pid-path", &settings.strPIDPath},
+        {L"alsa-device", &settings.strALSADevice}
     };
 
     void parse(std::wistream &_is);

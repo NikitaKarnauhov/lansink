@@ -16,6 +16,7 @@
 
 #include "alsa_wrapper.h"
 #include "formats.h"
+#include "settings.h"
 
 struct Samples {
     unap::Packet_Kind kind;
@@ -112,7 +113,7 @@ void Player::Impl::init(unap::Packet &_packet) {
     try {
         snd_pcm_hw_params_t *pParams;
 
-        ALSA::open(&m_pPcm, "default", SND_PCM_STREAM_PLAYBACK, 0);
+        ALSA::open(&m_pPcm, g_settings.strALSADevice.c_str(), SND_PCM_STREAM_PLAYBACK, 0);
         ALSA::hw_params_malloc(&pParams);
         ALSA::hw_params_any(m_pPcm, pParams);
         ALSA::hw_params_set_access(m_pPcm, pParams, SND_PCM_ACCESS_RW_INTERLEAVED);
@@ -131,6 +132,7 @@ void Player::Impl::init(unap::Packet &_packet) {
         m_cFrameBytes = ALSA::format_physical_width(get_format(_packet.format()))*_packet.channels()/8;
         m_cPosition = 0;
         m_bReady = true;
+        m_pLog->info("Opened ALSA device \"%s\"", g_settings.strALSADevice.c_str());
     } catch (std::exception &e) {
         m_pLog->log(llError, e.what());
         m_bReady = false;

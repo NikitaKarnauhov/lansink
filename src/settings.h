@@ -23,6 +23,7 @@
 struct Settings {
     std::string strLogPath = UNAP_TEMP_PREFIX "/" UNAP_PROGRAM_NAME ".log";
     std::string strPIDPath = UNAP_TEMP_PREFIX "/" UNAP_PROGRAM_NAME ".pid";
+    std::string strALSADevice = "default";
     int nLogLevel = 0;
     bool bDaemon = false;
 };
