@@ -80,10 +80,10 @@ void _parse_options(int _nArgs, char *const _pArgs[]) {
             {"log-level", required_argument, 0, 'L'},
             {"daemon", 0, 0, 'd'},
             {"no-daemon", 0, 0, 'n'},
-            {"pid-path", 0, 0, 'p'},
-            {"host", 0, 0, 'H'},
-            {"port", 0, 0, 'P'},
-            {"alsa-device", 0, 0, 'D'},
+            {"pid-path", required_argument, 0, 'p'},
+            {"host", required_argument, 0, 'H'},
+            {"port", required_argument, 0, 'P'},
+            {"alsa-device", required_argument, 0, 'D'},
             {0, 0, 0, 0}
     };
 
