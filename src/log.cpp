@@ -70,7 +70,7 @@ void Log::Impl::close(const std::string &_strFilename) {
 void Log::Impl::log(LogLevel _level, const std::string &_strMessage) {
     std::lock_guard<std::mutex> lock(m_mutex);
 
-    if (_level > m_level)
+    if (m_level == llSilent || _level > m_level)
         return;
 
     if (m_streams.empty())
@@ -100,6 +100,9 @@ void Log::Impl::log(LogLevel _level, const std::string &_strMessage) {
             break;
         case llError:
             strLevel = "ERROR: ";
+            break;
+        default:
+            throw LogicError("Unexpected log level %d", _level);
             break;
     }
 
