@@ -281,6 +281,8 @@ int main(int _nArgs, char *const _pArgs[]) {
     Log log("");
     bool bPIDWritten = false;
 
+    log.setLevel(llError);
+
     try {
         _parse_options(_nArgs, _pArgs);
         log.setLevel(LogLevel(g_settings.nLogLevel));
