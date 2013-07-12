@@ -289,7 +289,7 @@ int main(int _nArgs, char *const _pArgs[]) {
         bPIDWritten = _write_pid(log);
         _main(log);
     } catch (std::exception &e) {
-        log.log(llError, e.what());
+        log.error(e.what());
         return EXIT_FAILURE;
     }
 

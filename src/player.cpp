@@ -134,7 +134,7 @@ void Player::Impl::init(unap::Packet &_packet) {
         m_bReady = true;
         m_pLog->info("Opened ALSA device \"%s\"", g_settings.strALSADevice.c_str());
     } catch (std::exception &e) {
-        m_pLog->log(llError, e.what());
+        m_pLog->error(e.what());
         m_bReady = false;
     }
 }
@@ -259,13 +259,13 @@ void Player::Impl::run() {
                         _add_samples(nFrames, true);
                     }
                 } catch (ALSA::Error &e) {
-                    m_pLog->log(llWarning, e.what());
+                    m_pLog->warning(e.what());
                     nLastError = e.getError();
                     continue;
                 }
             }
         } catch (std::exception &e) {
-            m_pLog->log(llError, e.what());
+            m_pLog->error(e.what());
         }
     });
 }
@@ -315,7 +315,7 @@ void Player::Impl::_add_samples(size_t _cSamples, bool _bStopWhenEmpty) {
         }
 
         if (m_cPosition < cNext)
-            m_pLog->log(llInfo, "Inserting silence: %d, %d", m_cPosition, cNext - m_cPosition);
+            m_pLog->debug("Inserting silence: %d, %d", m_cPosition, cNext - m_cPosition);
 
         // Insert silence instead of missing samples.
         while (m_cPosition < cNext) {
@@ -338,7 +338,7 @@ void Player::Impl::_add_samples(size_t _cSamples, bool _bStopWhenEmpty) {
         const size_t cFramesRequested = cEnd - m_cPosition;
 
         if (const size_t cWriteSize = std::min(cFramesRequested, cFramesQueued)) {
-            m_pLog->log(llDebug, "Inserting audio: %d, %d (%d)",
+            m_pLog->debug("Inserting audio: %d, %d (%d)",
                     pSamples->cTimestamp + pSamples->cOffset, cWriteSize, m_cPosition);
 
             const size_t cBytesWritten = ALSA::writei(m_pPcm,
