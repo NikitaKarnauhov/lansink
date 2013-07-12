@@ -68,8 +68,7 @@ public:
 
 private:
     typedef std::chrono::high_resolution_clock Clock;
-    typedef Clock::duration Duration;
-    typedef std::chrono::duration<int, std::milli> DurationMS;
+    typedef std::chrono::duration<int, std::milli> Duration;
     typedef std::chrono::time_point<Clock> TimePoint;
 
     std::vector<unsigned int> m_formatValues;

@@ -201,7 +201,7 @@ void UNAP::_init_descriptors() {
 snd_pcm_sframes_t UNAP::_estimate_frames() const {
     if (m_status == usPaused)
         return m_nLastFrames;
-    DurationMS ms(std::chrono::duration_cast<DurationMS>(Clock::now() - m_startTime));
+    Duration ms(std::chrono::duration_cast<Duration>(Clock::now() - m_startTime));
     return m_nLastFrames + ms.count()*(get_rate()/1000.0);
 }
 
