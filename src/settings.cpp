@@ -156,8 +156,17 @@ void SettingsParser::parse_option(const std::string &_strOption, const std::stri
     std::wstringstream ss;
     const std::unique_ptr<wchar_t []> buf(new wchar_t[_strOption.size() + _strValue.size() + 4]);
     const std::locale loc;
-    const std::string str = _strOption + " \"" + _strValue + "\"";
+    std::string str = _strOption;
 
+    // Just option name.
+    std::use_facet<std::ctype<wchar_t> >(loc).widen(str.data(), str.data() + str.size() + 1, buf.get());
+
+    if (m_pImpl->stringSettings.find(buf.get()) != m_pImpl->stringSettings.end())
+        str += std::string(" \"") + _strValue + "\"";
+    else
+        str += std::string(" ") + _strValue;
+
+    // Name with value.
     std::use_facet<std::ctype<wchar_t> >(loc).widen(str.data(), str.data() + str.size() + 1, buf.get());
     ss << buf.get();
     m_pImpl->parse(ss);
