@@ -26,6 +26,8 @@
 #include <alsa/control.h>
 #include <alsa/pcm_external.h>
 
+#include "unap.pb.h"
+
 class UNAP : public snd_pcm_ioplug_t {
 public:
     std::string strHost;
@@ -93,6 +95,9 @@ private:
     std::function<void(void)> _make_worker();
     void _init_descriptors();
     snd_pcm_sframes_t _estimate_frames() const;
+    void _prepare_packet(unap::Packet &_packet, unap::Packet_Kind _kind, uint64_t _nTimestamp);
+    void _send_buffer(const void *_pBuf, size_t _cSize);
+    void _send_packet(const unap::Packet &_packet);
     void _send_data();
     void _send_pause();
     void _send_unpause();

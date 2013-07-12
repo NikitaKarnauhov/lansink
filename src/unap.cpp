@@ -6,7 +6,6 @@
  */
 
 #include "unap.h"
-#include "unap.pb.h"
 #include "formats.h"
 #include "exception.h"
 
@@ -257,23 +256,24 @@ std::function<void(void)> UNAP::_make_worker() {
     };
 }
 
-// TODO extract common code.
-void UNAP::_send_stop() {
-    unap::Packet packet;
-    auto pBuf = std::unique_ptr<char[]>(new char[this->nMTU]);
+void UNAP::_prepare_packet(unap::Packet &_packet, unap::Packet_Kind _kind,
+        uint64_t _nTimestamp)
+{
+    _packet.set_version(1);
+    _packet.set_stream(m_cStreamId);
+    _packet.set_kind(_kind);
+    _packet.set_channels(get_channel_count());
+    _packet.set_rate(get_rate());
+    _packet.set_format(m_strFormat);
+    _packet.set_timestamp(_nTimestamp);
 
-    packet.set_version(1);
-    packet.set_stream(m_cStreamId);
-    packet.set_kind(unap::Packet_Kind_STOP);
-    packet.set_channels(get_channel_count());
-    packet.set_rate(get_rate());
-    packet.set_format(m_strFormat);
-    packet.set_timestamp(_estimate_frames());
-    packet.set_samples("");
-    packet.SerializeToArray((void *)pBuf.get(), this->nMTU);
+    if (_kind != unap::Packet_Kind_DATA)
+        _packet.set_samples("");
+}
 
+void UNAP::_send_buffer(const void *_pBuf, size_t _cSize) {
     for (size_t cRetry = 0; cRetry < 5; ++cRetry) {
-        if (send(m_nSocket, (const void *)pBuf.get(), packet.ByteSize(), 0) >= 0)
+        if (send(m_nSocket, _pBuf, _cSize, 0) >= 0)
             break;
 
         if (errno != ECONNREFUSED)
@@ -281,72 +281,39 @@ void UNAP::_send_stop() {
 
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
+}
+
+void UNAP::_send_packet(const unap::Packet &_packet) {
+    auto pBuf = std::unique_ptr<char[]>(new char[this->nMTU]);
+    assert(_packet.ByteSize() <= this->nMTU);
+    _packet.SerializeToArray((void *)pBuf.get(), this->nMTU);
+    _send_buffer((const void *)pBuf.get(), _packet.ByteSize());
+}
+
+void UNAP::_send_stop() {
+    unap::Packet packet;
+    _prepare_packet(packet, unap::Packet_Kind_STOP, _estimate_frames());
+    _send_packet(packet);
 }
 
 void UNAP::_send_pause() {
     unap::Packet packet;
-    auto pBuf = std::unique_ptr<char[]>(new char[this->nMTU]);
-
-    packet.set_version(1);
-    packet.set_stream(m_cStreamId);
-    packet.set_kind(unap::Packet_Kind_PAUSE);
-    packet.set_channels(get_channel_count());
-    packet.set_rate(get_rate());
-    packet.set_format(m_strFormat);
-    packet.set_timestamp(m_nLastFrames);
-    packet.set_samples("");
-    packet.SerializeToArray((void *)pBuf.get(), this->nMTU);
-
-    for (size_t cRetry = 0; cRetry < 5; ++cRetry) {
-        if (send(m_nSocket, (const void *)pBuf.get(), packet.ByteSize(), 0) >= 0)
-            break;
-
-        if (errno != ECONNREFUSED)
-            throw SystemError("send()");
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
+    _prepare_packet(packet, unap::Packet_Kind_PAUSE, _estimate_frames());
+    _send_packet(packet);
 }
 
 void UNAP::_send_unpause() {
     unap::Packet packet;
-    auto pBuf = std::unique_ptr<char[]>(new char[this->nMTU]);
-
-    packet.set_version(1);
-    packet.set_stream(m_cStreamId);
-    packet.set_kind(unap::Packet_Kind_UNPAUSE);
-    packet.set_channels(get_channel_count());
-    packet.set_rate(get_rate());
-    packet.set_format(m_strFormat);
-    packet.set_timestamp(m_nLastFrames);
-    packet.set_samples("");
-    packet.SerializeToArray((void *)pBuf.get(), this->nMTU);
-
-    for (size_t cRetry = 0; cRetry < 5; ++cRetry) {
-        if (send(m_nSocket, (const void *)pBuf.get(), packet.ByteSize(), 0) >= 0)
-            break;
-
-        if (errno != ECONNREFUSED)
-            throw SystemError("send()");
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
+    _prepare_packet(packet, unap::Packet_Kind_UNPAUSE, m_nLastFrames);
+    _send_packet(packet);
 }
 
 void UNAP::_send_data() {
-    assert(m_queue.front().second > m_queue.front().first);
-
     unap::Packet packet;
 
+    assert(m_queue.front().second > m_queue.front().first);
     assert(m_bPrepared);
-
-    packet.set_version(1);
-    packet.set_stream(m_cStreamId);
-    packet.set_kind(unap::Packet_Kind_DATA);
-    packet.set_channels(get_channel_count());
-    packet.set_rate(get_rate());
-    packet.set_format(m_strFormat);
-    packet.set_timestamp(m_nPointer);
+    _prepare_packet(packet, unap::Packet_Kind_DATA, m_nPointer);
 
     const size_t cHeaderSize = packet.ByteSize() + 4; // Account for data length field.
     const size_t cFrameSize = get_bytes_per_frame();
@@ -386,16 +353,7 @@ void UNAP::_send_data() {
     // Send.
     assert(packet.ByteSize() <= this->nMTU);
     packet.SerializeToArray((void *)pBuf.get(), this->nMTU);
-
-    for (size_t cRetry = 0; cRetry < 5; ++cRetry) {
-        if (send(m_nSocket, (const void *)pBuf.get(), packet.ByteSize(), 0) >= 0)
-            break;
-
-        if (errno != ECONNREFUSED)
-            throw SystemError("send()");
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
+    _send_buffer((const void *)pBuf.get(), packet.ByteSize());
 }
 
 void UNAP::connect() {
