@@ -113,13 +113,25 @@ void _parse_options(int _nArgs, char *const _pArgs[]) {
                 sp.parse_file(optarg);
                 break;
 
+            case 'd':
+                kvs["daemon"] = "true";
+                break;
+
+            case 'n':
+                kvs["daemon"] = "false";
+                break;
+
             case '?':
                 _print_usage(std::cerr);
                 exit(EXIT_FAILURE);
 
             default:
+                if (!optarg)
+                    throw LogicError("Option '%c' reuires argument", c);
+
                 kvs[std::find_if(std::begin(options), std::end(options),
                         [c](struct option &_opt) {return _opt.val == c;})->name] = optarg;
+
                 break;
         }
     }
