@@ -11,6 +11,7 @@
 #include <string>
 
 enum LogLevel {
+    llSilent,
     llError,
     llWarning,
     llInfo,
@@ -27,6 +28,8 @@ public:
 
     void open(const std::string &_strFilename);
     void close(const std::string &_strFilename);
+
+    void setLevel(LogLevel _ll);
 
     void log(LogLevel _level, const std::string &_strMessage);
     void log(LogLevel _level, const char *_strFormat, ...);

@@ -30,6 +30,9 @@ public:
 private:
     std::mutex m_mutex;
     std::map<std::string, std::ostream *> m_streams;
+    LogLevel m_level = llSilent;
+
+    friend class Log;
 };
 
 Log::Impl::~Impl() {
@@ -66,6 +69,9 @@ void Log::Impl::close(const std::string &_strFilename) {
 
 void Log::Impl::log(LogLevel _level, const std::string &_strMessage) {
     std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (_level > m_level)
+        return;
 
     if (m_streams.empty())
         return;
@@ -136,6 +142,10 @@ void Log::open(const std::string &_strFilename) {
 
 void Log::close(const std::string &_strFilename) {
     m_pImpl->close(_strFilename);
+}
+
+void Log::setLevel(LogLevel _ll) {
+    m_pImpl->m_level = _ll;
 }
 
 void Log::log(LogLevel _level, const std::string &_strMessage) {

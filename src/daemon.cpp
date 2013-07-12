@@ -269,6 +269,7 @@ int main(int _nArgs, char *const _pArgs[]) {
 
     try {
         _parse_options(_nArgs, _pArgs);
+        log.setLevel(LogLevel(g_settings.nLogLevel));
 
         if (!g_settings.strLogPath.empty()) {
             log.open(g_settings.strLogPath);
