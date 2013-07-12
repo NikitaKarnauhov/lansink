@@ -56,6 +56,8 @@ void _print_usage(std::ostream &_os) {
             "  -d, --daemon            Run as a daemon.\n" <<
             "  -n, --no-daemon         Don't run as a daemon, display log messages (default).\n" <<
             "  -p, --pid-path          PID file location.\n" <<
+            "  -H, --host              Server host.\n" <<
+            "  -P, --port              Server port.\n" <<
             "  -D, --alsa-device       Output ALSA device.\n" <<
             "" << std::flush;
 }
@@ -79,11 +81,13 @@ void _parse_options(int _nArgs, char *const _pArgs[]) {
             {"daemon", 0, 0, 'd'},
             {"no-daemon", 0, 0, 'n'},
             {"pid-path", 0, 0, 'p'},
+            {"host", 0, 0, 'H'},
+            {"port", 0, 0, 'P'},
             {"alsa-device", 0, 0, 'D'},
             {0, 0, 0, 0}
     };
 
-    const char *strOptions = "hvc:l:L:dnp:D:";
+    const char *strOptions = "hvc:l:L:dnp:H:P:D:";
     int nOption = 0;
     SettingsParser sp;
     std::map<std::string, std::string> kvs;
@@ -143,56 +147,49 @@ void _parse_options(int _nArgs, char *const _pArgs[]) {
 }
 
 static
+std::string _in_addr_to_string(struct sockaddr *_pAddr) {
+    char buf[INET6_ADDRSTRLEN];
+    void *pInAddr = nullptr;
+
+    if (_pAddr->sa_family == AF_INET)
+        pInAddr = &(((struct sockaddr_in *) _pAddr)->sin_addr);
+    else
+        pInAddr = &(((struct sockaddr_in6 *) _pAddr)->sin6_addr);
+
+    inet_ntop(_pAddr->sa_family, pInAddr, buf, sizeof(buf));
+
+    return buf;
+}
+
+static
 void _main(Log &_log) {
-    std::string strHost("127.0.0.1");
-    std::string strPort("26751");
+    std::string strPort = format(16, "%d", g_settings.nPort);
+    struct addrinfo hints = {};
+    struct addrinfo *pServerInfo = nullptr;
 
-//    int m_nSocket = socket(PF_INET, SOCK_DGRAM, 0);
-//
-//    if (m_nSocket < 0)
-//        throw std::runtime_error(strerror(errno));
-//
-//    struct sockaddr_in name;
-//
-//    name.sin_family = AF_INET;
-//    name.sin_port = htons(nPort);
-//
-//    struct hostent *pHost = gethostbyname(strHost.c_str());
-//
-//    if (!pHost)
-//        throw std::runtime_error(strerror(errno));
-//
-//    name.sin_addr = *(struct in_addr *)pHost->h_addr;
-
-
-    struct addrinfo hints;
-    struct addrinfo *serverinfo;
-
-    memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_DGRAM;
     hints.ai_flags = AI_PASSIVE;
 
-    if (getaddrinfo(NULL, strPort.c_str(), &hints, &serverinfo) < 0)
+    if (getaddrinfo(g_settings.strHost.empty() ? NULL : g_settings.strHost.c_str(),
+            strPort.c_str(), &hints, &pServerInfo) < 0)
         throw SystemError("getaddrinfo()");
 
-    const int nSocket = socket(serverinfo->ai_family, serverinfo->ai_socktype, serverinfo->ai_protocol);
+    const int nSocket = socket(pServerInfo->ai_family,
+            pServerInfo->ai_socktype, pServerInfo->ai_protocol);
 
-    if (bind(nSocket, serverinfo->ai_addr, serverinfo->ai_addrlen) < 0)
+    if (bind(nSocket, pServerInfo->ai_addr, pServerInfo->ai_addrlen) < 0)
         throw SystemError("bind()");
 
-    freeaddrinfo(serverinfo);
+    _log.info("Server listening on %s:%d",
+            _in_addr_to_string(pServerInfo->ai_addr).c_str(), g_settings.nPort);
+
+    freeaddrinfo(pServerInfo);
 
     struct pollfd fd{nSocket, POLLIN, 0};
-    size_t cBufferSize = 1024*100; // Should be enough, right?
+    constexpr size_t cBufferSize = 1024*100; // Should be enough, right?
     auto pBuf = std::unique_ptr<char[]>(new char[cBufferSize]);
     std::list<unap::Packet> packets;
-//    unap::Packet p;
-//
-//    player.init(p);
-//    player.play(p);
-//
-//    return EXIT_SUCCESS;
 
     do {
         try {
@@ -200,28 +197,25 @@ void _main(Log &_log) {
                 throw SystemError("poll()");
 
             if (fd.revents & POLLIN) {
-                struct sockaddr sender;
-                socklen_t sendsize = sizeof(sender);
-                bzero(&sender, sizeof(sender));
-                const int nPacketSize = recvfrom(fd.fd, pBuf.get(), cBufferSize, 0, &sender, &sendsize);
-                char strSender[128];
+                struct sockaddr sender = {};
+                socklen_t cSendSize = sizeof(sender);
+                const int nPacketSize = recvfrom(
+                        fd.fd, pBuf.get(), cBufferSize, 0, &sender, &cSendSize);
 
                 if (nPacketSize < 0)
                     throw SystemError("recvfrom()");
 
-                inet_ntop(sender.sa_family, &((struct sockaddr_in &)sender).sin_addr,
-                        strSender, sizeof(strSender));
-
                 unap::Packet &packet = *packets.emplace(packets.end());
 
                 if (!packet.ParseFromArray(pBuf.get(), nPacketSize)) {
-                    _log.debug("Broken packet.");
+                    _log.debug("Broken packet from %s", _in_addr_to_string(&sender).c_str());
                     continue;
                 }
 
                 Player *pPlayer = Player::get(packet, _log);
 
                 if (!pPlayer->is_prepared()) {
+                    _log.info("New connection from %s", _in_addr_to_string(&sender).c_str());
                     pPlayer->init(packet);
                     pPlayer->run();
                 }

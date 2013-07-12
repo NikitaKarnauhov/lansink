@@ -39,12 +39,14 @@ struct SettingsParser::Impl {
     };
 
     std::map<std::wstring, int *, LessIC> intSettings{
-        {L"log-level", &settings.nLogLevel}
+        {L"log-level", &settings.nLogLevel},
+        {L"port", &settings.nPort}
     };
 
     std::map<std::wstring, std::string *, LessIC> stringSettings{
         {L"log-path", &settings.strLogPath},
         {L"pid-path", &settings.strPIDPath},
+        {L"host", &settings.strHost},
         {L"alsa-device", &settings.strALSADevice}
     };
 

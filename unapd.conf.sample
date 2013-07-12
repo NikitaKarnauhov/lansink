@@ -12,5 +12,9 @@ log-level 3
 // Enable running as a daemon.
 daemon true
 
+// Incoming connection address.
+host "127.0.0.1"
+port 26751
+
 // Output ALSA device.
 alsa-device "pulse"
