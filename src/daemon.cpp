@@ -16,7 +16,7 @@
 #include <set>
 #include <thread>
 #include <mutex>
-#include <algorithm>
+#include <unordered_map>
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -91,8 +91,11 @@ void _parse_options(int _nArgs, char *const _pArgs[]) {
     int nOption = 0;
     SettingsParser sp;
     std::map<std::string, std::string> kvs;
+    std::unordered_map<int, std::string> longNames;
 
-    // TODO: build std::map<int, std::string>
+    for (auto &option : options)
+        if (option.name)
+            longNames[option.val] = option.name;
 
     // Handle --help, --version and --config-path options.
     while (true) {
@@ -133,9 +136,7 @@ void _parse_options(int _nArgs, char *const _pArgs[]) {
                 if (!optarg)
                     throw LogicError("Option '%c' reuires argument", c);
 
-                kvs[std::find_if(std::begin(options), std::end(options),
-                        [c](struct option &_opt) {return _opt.val == c;})->name] = optarg;
-
+                kvs[longNames[c]] = optarg;
                 break;
         }
     }
