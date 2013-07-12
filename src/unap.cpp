@@ -121,22 +121,6 @@ snd_pcm_sframes_t UNAP::transfer(const char *_pData, size_t _cOffset, size_t _cS
 
     m_nAvail += _cSize;
 
-    char *pCopy = new char[cBufferBytes];
-    memcpy(pCopy, pStart, cBufferBytes);
-    memset(pStart, 0, cBufferBytes);
-    static size_t cPacket = 0;
-    ++cPacket;
-
-    for (auto &p : m_queue) {
-        for (char *c = (char *)p.first; c != p.second; ++c) {
-            assert(*c == 0);
-            *c = 1;
-        }
-    }
-
-    memcpy(pStart, pCopy, cBufferBytes);
-    delete[] pCopy;
-
     return _cSize;
 }
 
