@@ -310,7 +310,9 @@ void UNAP::_send_data() {
         if (cAvailable > 0) {
             const size_t c = std::min(cAvailable, (cBytes/cFrameSize)*cFrameSize);
 
-            // FIXME c may equal zero.
+            if (c == 0)
+                throw LogicError("Queue element size isn't mulptiple of frame size");
+
             memcpy(pPos, pSource, c);
 
             pSource += c;
