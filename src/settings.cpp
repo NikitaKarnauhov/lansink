@@ -40,7 +40,8 @@ struct SettingsParser::Impl {
 
     std::map<std::wstring, int *, LessIC> intSettings{
         {L"log-level", &settings.nLogLevel},
-        {L"port", &settings.nPort}
+        {L"port", &settings.nPort},
+        {L"recovery-timeout", &settings.nRecoveryTimeout}
     };
 
     std::map<std::wstring, std::string *, LessIC> stringSettings{

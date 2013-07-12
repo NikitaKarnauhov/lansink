@@ -27,6 +27,7 @@ struct Settings {
     std::string strALSADevice = "default";
     int nLogLevel = 0;
     int nPort = 26751;
+    int nRecoveryTimeout = 120;
     bool bDaemon = false;
 };
 

@@ -59,6 +59,7 @@ void _print_usage(std::ostream &_os) {
             "  -H, --host              Server host.\n" <<
             "  -P, --port              Server port.\n" <<
             "  -D, --alsa-device       Output ALSA device.\n" <<
+            "      --recovery-timeout  Seconds to wait after for stream data to reappear.\n" <<
             "" << std::flush;
 }
 
@@ -84,6 +85,7 @@ void _parse_options(int _nArgs, char *const _pArgs[]) {
             {"host", required_argument, 0, 'H'},
             {"port", required_argument, 0, 'P'},
             {"alsa-device", required_argument, 0, 'D'},
+            {"recovery-timeout", required_argument, 0, 500},
             {0, 0, 0, 0}
     };
 

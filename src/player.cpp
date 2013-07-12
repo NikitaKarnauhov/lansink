@@ -11,6 +11,7 @@
 #include <set>
 #include <thread>
 #include <mutex>
+#include <chrono>
 
 #include <alsa/asoundlib.h>
 
@@ -185,9 +186,10 @@ void Player::Impl::play(unap::Packet &_packet) {
 void Player::Impl::run() {
     m_worker = std::thread([&]() {
         try {
+            typedef std::chrono::steady_clock Clock;
+
             int nLastError = 0;
-            constexpr size_t c_cMaxRetries = 1000;
-            size_t cRetry = 0;
+            Clock::time_point errorTime;
             bool bPrevPaused = false;
 
             while (true) {
@@ -212,8 +214,6 @@ void Player::Impl::run() {
                 if (nLastError < 0) {
                     bool bEmpty = false;
 
-                    ++cRetry;
-
                     {
                         std::lock_guard<std::mutex> lock(m_mutex);
                         bEmpty = m_queue.empty();
@@ -221,14 +221,17 @@ void Player::Impl::run() {
 
                     // Sleep until recovered.
                     if (bEmpty) {
-                        if (cRetry > c_cMaxRetries) {
+                        auto secondsElapsed(std::chrono::duration_cast<std::chrono::seconds>(
+                                Clock::now() - errorTime));
+
+                        if (secondsElapsed.count() > g_settings.nRecoveryTimeout) {
                             m_pLog->info("Dropping stream %llu", m_cStreamId);
                             ALSA::close(m_pPcm);
                             break;
                         }
 
                         // TODO any way to auto-release mutex before going to sleep? condwait?
-                        m_pLog->log(cRetry == 1 ? llInfo : llDebug, "Sleeping until recovered...");
+                        m_pLog->debug("Sleeping until recovered...");
                         std::this_thread::sleep_for(std::chrono::milliseconds(100));
                         continue;
                     }
@@ -239,7 +242,6 @@ void Player::Impl::run() {
                     ALSA::recover(m_pPcm, nLastError, true);
                     nLastError = 0;
 
-                    // TODO timeout to drop the stream.
                     continue;
                 }
 
@@ -261,6 +263,7 @@ void Player::Impl::run() {
                 } catch (ALSA::Error &e) {
                     m_pLog->warning(e.what());
                     nLastError = e.getError();
+                    errorTime = Clock::now();
                     continue;
                 }
             }
