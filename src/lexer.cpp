@@ -246,6 +246,7 @@ bool Lexer::_read_real(Token &_tok) {
         _append(_tok, m_is.get());
         _append(_tok, _read_digits());
     } else if (m_is.peek() != L'e' && m_is.peek() != L'E') {
+        m_is.clear();
         for (size_t i = 0; i < _tok.strData.size(); ++i)
             m_is.putback(_tok.strData[_tok.strData.size() - i - 1]);
         return false;
@@ -258,6 +259,7 @@ bool Lexer::_read_real(Token &_tok) {
             const wchar_t d = m_is.get();
 
             if (!_is_digit(m_is.peek())) {
+                m_is.clear();
                 m_is.putback(d);
                 m_is.putback(c);
                 return true;
@@ -352,6 +354,7 @@ bool Lexer::_read_identifier(Token &_tok) {
         }
 
         if (!_is_alnum(c)) {
+            m_is.clear();
             // Order doesn't matter, it's all underscores.
             for (wchar_t d : _tok.strData)
                 m_is.putback(d);
@@ -394,6 +397,7 @@ bool Lexer::_read_raw(Token &_tok) {
     Token ident;
 
     if (!_read_identifier(ident)) {
+        m_is.clear();
         for (auto i = _tok.strData.rend(); i != _tok.strData.rbegin(); ++i)
             m_is.putback(*i);
         return false;
@@ -443,6 +447,7 @@ bool Lexer::_read_lexeme(Token &_tok) {
     }
 
     if (_tok.kind == TK::None) {
+        m_is.clear();
         for (size_t i = 0; i < _tok.strData.size(); ++i)
             m_is.putback(_tok.strData[_tok.strData.size() - i - 1]);
         return false;
