@@ -178,23 +178,19 @@ void UNAP::_init_descriptors() {
     int fds[2];
 
     if (socketpair(AF_LOCAL, SOCK_STREAM, 0, fds) != 0)
-        perror(__FUNCTION__);
+        throw SystemError("socketpair()");
 
     for (int fd : fds) {
         int fl;
 
-        if ((fl = fcntl(fd, F_GETFL)) < 0) {
-            perror(__FUNCTION__);
-            break;
-        }
+        if ((fl = fcntl(fd, F_GETFL)) < 0)
+            throw SystemError("fcntl()");
 
         if (fl & O_NONBLOCK)
             break;
 
-        if (fcntl(fd, F_SETFL, fl | O_NONBLOCK) < 0) {
-            perror(__FUNCTION__);
-            break;
-        }
+        if (fcntl(fd, F_SETFL, fl | O_NONBLOCK) < 0)
+            throw SystemError("fcntl()");
     }
 
     poll_fd = fds[0];
