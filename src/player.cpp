@@ -62,11 +62,14 @@ public:
         m_cPosition(0), m_pLog(&_log), m_bReady(false), m_bPaused(false), m_bClosed(false) {}
 
     ~Impl() {
-        ALSA::drain(m_pPcm);
+        if (m_pPcm)
+            ALSA::drain(m_pPcm);
         m_pPcm = nullptr;
     }
 
     static Player *get(unap::Packet &_packet, Log &_log);
+    static void remove(uint64_t _cId);
+    static void remove_stopped();
 
     bool is_prepared() const {
         return m_pPcm != nullptr;
@@ -75,6 +78,7 @@ public:
     void init(unap::Packet &_packet);
     void run();
     void play(unap::Packet &_packet);
+    uint64_t get_id() const { return m_cStreamId; }
 
 private:
     uint64_t m_cStreamId;
@@ -110,6 +114,29 @@ Player *Player::Impl::get(unap::Packet &_packet, Log &_log) {
         player.first->second = new Player(_packet.stream(), _log);
 
     return player.first->second;
+}
+
+void Player::Impl::remove(uint64_t _cId) {
+    std::lock_guard<std::mutex> lock(s_playerMapMutex);
+    auto iPlayer = s_players.find(_cId);
+
+    if (iPlayer == s_players.end())
+        return;
+
+    delete iPlayer->second;
+    s_players.erase(iPlayer);
+}
+
+void Player::Impl::remove_stopped() {
+    std::lock_guard<std::mutex> lock(s_playerMapMutex);
+
+    for (auto iPlayer = s_players.begin(); iPlayer != s_players.end();)
+        if (!iPlayer->second->is_prepared()) {
+            iPlayer->second->m_pImpl->m_worker.join();
+            delete iPlayer->second;
+            iPlayer = s_players.erase(iPlayer);
+        } else
+            ++iPlayer;
 }
 
 void Player::Impl::init(unap::Packet &_packet) {
@@ -200,6 +227,7 @@ void Player::Impl::run() {
                     if (m_bClosed) {
                         m_pLog->info("Closing stream %llu", m_cStreamId);
                         ALSA::close(m_pPcm);
+                        m_pPcm = nullptr;
                         break;
                     }
 
@@ -365,7 +393,16 @@ Player::~Player() {
 }
 
 Player *Player::get(unap::Packet &_packet, Log &_log) {
+    Player::remove_stopped();
     return Impl::get(_packet, _log);
+}
+
+void Player::remove(Player *_pPlayer) {
+    Impl::remove(_pPlayer->get_id());
+}
+
+void Player::remove_stopped() {
+    Impl::remove_stopped();
 }
 
 bool Player::is_prepared() const {
@@ -382,4 +419,8 @@ void Player::run() {
 
 void Player::play(unap::Packet &_packet) {
     m_pImpl->play(_packet);
+}
+
+uint64_t Player::get_id() const {
+    return m_pImpl->get_id();
 }

@@ -74,6 +74,7 @@ private:
     std::vector<unsigned int> m_formatValues;
     std::string m_strFormat;
     size_t m_cBitsPerSample;
+    size_t m_cChannels;
     std::thread m_worker;
     mutable std::mutex m_mutex;
     int m_nSockWorker;

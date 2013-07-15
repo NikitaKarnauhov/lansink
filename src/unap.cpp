@@ -27,8 +27,10 @@ unsigned int UNAP::s_cSeed = 0;
 std::default_random_engine UNAP::s_randomEngine = std::default_random_engine();
 
 UNAP::UNAP() :
-    strHost("127.0.0.1"), nPort(26751), nMTU(1500), m_nSockWorker(0), m_status(usStopped),
-    m_nSocket(-1)
+    strHost("127.0.0.1"), nPort(26751), nMTU(1500),
+    m_strFormat(""), m_cBitsPerSample(0), m_cChannels(0),
+    m_nSockWorker(0), m_status(usStopped), m_nSocket(-1),
+    m_cStreamId(0)
 {
     if (s_cSeed == 0) {
         try {
@@ -125,10 +127,20 @@ snd_pcm_sframes_t UNAP::transfer(const char *_pData, size_t _cOffset, size_t _cS
 }
 
 void UNAP::prepare() {
+    const std::string strOldFormat = m_strFormat;
+    const size_t cOldRate = m_cBitsPerSample;
+    const size_t cOldChannels = m_cChannels;
+
     _reset(true);
     m_nAvail = 0;
     m_strFormat = get_format_name(get_format());
     m_cBitsPerSample = snd_pcm_format_physical_width(get_format());
+    m_cChannels = get_channel_count();
+
+    if (m_strFormat != strOldFormat || m_cBitsPerSample != cOldRate ||
+            m_cChannels != cOldChannels)
+        m_cStreamId = s_randomEngine();
+
     assert(get_bytes_per_frame() > 0);
     assert(get_buffer_size() > 0);
     std::unique_ptr<char[]> pBuffer(new char[get_buffer_size()*get_bytes_per_frame()]);
@@ -163,7 +175,6 @@ void UNAP::_reset(bool _bResetStreamParams) {
     m_nPointer = 0;
     m_nLastFrames = 0;
     m_startTime = TimePoint();
-    m_cStreamId = s_randomEngine();
 
     if (_bResetStreamParams) {
         m_nAvail = 0;
@@ -242,7 +253,7 @@ void UNAP::_prepare_packet(unap::Packet &_packet, unap::Packet_Kind _kind,
     _packet.set_version(1);
     _packet.set_stream(m_cStreamId);
     _packet.set_kind(_kind);
-    _packet.set_channels(get_channel_count());
+    _packet.set_channels(m_cChannels);
     _packet.set_rate(get_rate());
     _packet.set_format(m_strFormat);
     _packet.set_timestamp(_nTimestamp);
@@ -389,7 +400,7 @@ snd_pcm_uframes_t UNAP::get_period_size() const {
 }
 
 size_t UNAP::get_bytes_per_frame() const {
-    return get_channel_count()*m_cBitsPerSample/8;
+    return m_cChannels*m_cBitsPerSample/8;
 }
 
 snd_pcm_format_t UNAP::get_format() const {

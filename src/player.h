@@ -16,11 +16,14 @@ public:
     ~Player();
 
     static Player *get(unap::Packet &_packet, Log &_log);
+    static void remove(Player *_pPlayer);
+    static void remove_stopped();
 
     bool is_prepared() const;
     void init(unap::Packet &_packet);
     void run();
     void play(unap::Packet &_packet);
+    uint64_t get_id() const;
 
 private:
     class Impl;
