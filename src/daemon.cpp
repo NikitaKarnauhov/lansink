@@ -218,6 +218,7 @@ void _main(Log &_log) {
                 Player *pPlayer = Player::get(packet, _log);
 
                 if (!pPlayer->is_prepared()) {
+                    // FIXME handle 'device or resource busy'.
                     _log.info("New connection from %s", _in_addr_to_string(&sender).c_str());
                     pPlayer->init(packet);
                     pPlayer->run();

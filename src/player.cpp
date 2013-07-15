@@ -12,6 +12,7 @@
 #include <thread>
 #include <mutex>
 #include <chrono>
+#include <condition_variable>
 
 #include <alsa/asoundlib.h>
 
@@ -92,6 +93,7 @@ private:
     bool m_bReady;
     bool m_bPaused;
     bool m_bClosed;
+    std::condition_variable m_dataAvailable;
 
     typedef std::map<uint64_t, Player *> Players;
     static Players s_players;
@@ -160,12 +162,8 @@ void Player::Impl::play(unap::Packet &_packet) {
             m_cPosition = _packet.timestamp();
     }
 
-    while (m_cPosition < 2*m_cPeriodSize) {
-        if (m_queue.empty())
-            return;
-
-        _add_samples(2*m_cPeriodSize - m_cPosition, true);
-    }
+    if (!m_queue.empty())
+        m_dataAvailable.notify_all();
 
     // Dump data.
 //        static int nCount = 0;
@@ -186,10 +184,7 @@ void Player::Impl::play(unap::Packet &_packet) {
 void Player::Impl::run() {
     m_worker = std::thread([&]() {
         try {
-            typedef std::chrono::steady_clock Clock;
-
             int nLastError = 0;
-            Clock::time_point errorTime;
             bool bPrevPaused = false;
 
             while (true) {
@@ -212,28 +207,19 @@ void Player::Impl::run() {
                 }
 
                 if (nLastError < 0) {
-                    bool bEmpty = false;
+                    std::unique_lock<std::mutex> lock(m_mutex);
 
-                    {
-                        std::lock_guard<std::mutex> lock(m_mutex);
-                        bEmpty = m_queue.empty();
-                    }
+                    m_pLog->info("Waiting for recovery (timeout %d seconds)",
+                            g_settings.nRecoveryTimeout);
 
-                    // Sleep until recovered.
-                    if (bEmpty) {
-                        auto secondsElapsed(std::chrono::duration_cast<std::chrono::seconds>(
-                                Clock::now() - errorTime));
+                    // TODO signal 'cv' when queue becomes non-empty.
+                    m_dataAvailable.wait_for(lock, std::chrono::seconds(g_settings.nRecoveryTimeout),
+                            [&]() { return !m_queue.empty(); });
 
-                        if (secondsElapsed.count() > g_settings.nRecoveryTimeout) {
-                            m_pLog->info("Dropping stream %llu", m_cStreamId);
-                            ALSA::close(m_pPcm);
-                            break;
-                        }
-
-                        // TODO any way to auto-release mutex before going to sleep? condwait?
-                        m_pLog->debug("Sleeping until recovered...");
-                        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                        continue;
+                    if (m_queue.empty()) {
+                        m_pLog->info("Dropping stream %llu", m_cStreamId);
+                        ALSA::close(m_pPcm);
+                        break;
                     }
 
                     // Try to recover if error occurred.
@@ -248,11 +234,16 @@ void Player::Impl::run() {
                 try {
                     ALSA::wait(m_pPcm, 1000);
 
-                    // Initial portion should be filled by play().
-                    if (m_cPosition == 0)
+                    std::lock_guard<std::mutex> lock(m_mutex);
+
+                    if (m_queue.empty())
                         continue;
 
-                    std::lock_guard<std::mutex> lock(m_mutex);
+                    // Fill up initial portion.
+                    if (m_cPosition < 2*m_cPeriodSize) {
+                        _add_samples(2*m_cPeriodSize - m_cPosition, true);
+                        continue;
+                    }
 
                     snd_pcm_sframes_t nFrames = ALSA::avail_update(m_pPcm);
 
@@ -262,9 +253,11 @@ void Player::Impl::run() {
                     }
                 } catch (ALSA::Error &e) {
                     m_pLog->warning(e.what());
-                    nLastError = e.getError();
-                    errorTime = Clock::now();
-                    continue;
+
+                    if (e.getError() == -EPIPE)
+                        ALSA::prepare(m_pPcm);
+                    else
+                        nLastError = e.getError();
                 }
             }
         } catch (std::exception &e) {
@@ -354,7 +347,7 @@ void Player::Impl::_add_samples(size_t _cSamples, bool _bStopWhenEmpty) {
         if (pSamples->cOffset*m_cFrameBytes < pSamples->data.size())
             m_queue.insert(pSamples);
         else
-            delete pSamples;
+            delete pSamples; // Possible leak if writei() above throws an exception.
 
         if (m_queue.empty() && _bStopWhenEmpty)
             break;
