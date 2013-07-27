@@ -37,7 +37,7 @@
 
 #include <unap.pb.h>
 #include "log.h"
-#include "alsa_wrapper.h"
+#include "alsa.h"
 #include "player.h"
 #include "settings.h"
 

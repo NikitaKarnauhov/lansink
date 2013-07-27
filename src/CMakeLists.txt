@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 2.8)
 
-set(TARGET unap)
+set(CLIENT asound_module_pcm_unap)
+set(SERVER unapd)
 
 add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/unap.pb.cc
@@ -12,9 +13,9 @@ add_custom_command(
 
 set(CLIENT_SOURCES
     unap.cpp
-    pcm_unap.cpp
+    ioplug.cpp
     formats.cpp
-    alsa_wrapper.cpp
+    alsa.cpp
     utils.cpp
     log.cpp
     ${CMAKE_CURRENT_BINARY_DIR}/unap.pb.cc
@@ -32,17 +33,14 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--export-dynamic -Wl,--no-undefined")  
-#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -DPIC")
 
-
-add_library(${TARGET} SHARED ${CLIENT_SOURCES})
-target_link_libraries(${TARGET} dl ${ALSA_LIBRARIES} ${PROTOBUF_LIBRARIES})
-
+add_library(${CLIENT} SHARED ${CLIENT_SOURCES})
+target_link_libraries(${CLIENT} dl ${ALSA_LIBRARIES} ${PROTOBUF_LIBRARIES})
 
 set(SERVER_SOURCES
     daemon.cpp
     log.cpp
-    alsa_wrapper.cpp
+    alsa.cpp
     player.cpp
     formats.cpp
     lexer.cpp
@@ -51,5 +49,5 @@ set(SERVER_SOURCES
     ${CMAKE_CURRENT_BINARY_DIR}/unap.pb.cc
 )
 
-add_executable(unapd ${SERVER_SOURCES})
-target_link_libraries(unapd ${ALSA_LIBRARIES} ${PROTOBUF_LIBRARIES})
+add_executable(${SERVER} ${SERVER_SOURCES})
+target_link_libraries(${SERVER} ${ALSA_LIBRARIES} ${PROTOBUF_LIBRARIES})

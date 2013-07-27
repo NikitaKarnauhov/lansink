@@ -1,12 +1,12 @@
 /*
- * alsa_wrapper.h
+ * alsa.h
  *
  *  Created on: May 4, 2013
  *      Author: nikita.karnauhov@gmail.com
  */
 
-#ifndef ALSA_WRAPPER_H_
-#define ALSA_WRAPPER_H_
+#ifndef ALSA_H_
+#define ALSA_H_
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -73,4 +73,4 @@ struct ALSA {
     static unsigned int format_physical_width(snd_pcm_format_t _format);
 };
 
-#endif /* ALSA_WRAPPER_H_ */
+#endif /* ALSA_H_ */

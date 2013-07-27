@@ -6,7 +6,7 @@
  */
 
 #include "formats.h"
-#include "alsa_wrapper.h"
+#include "alsa.h"
 
 Formats g_formats{
     // Signed 8 bit.

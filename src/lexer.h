@@ -1,5 +1,5 @@
 /*
- * Lexer.h
+ * lexer.h
  *
  *  Created on: Jul 3, 2012
  *      Author: nikita.karnauhov@gmail.com

@@ -16,7 +16,7 @@
 
 #include <alsa/asoundlib.h>
 
-#include "alsa_wrapper.h"
+#include "alsa.h"
 #include "formats.h"
 #include "settings.h"
 

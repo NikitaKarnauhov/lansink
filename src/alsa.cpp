@@ -1,11 +1,11 @@
 /*
- * alsa_wrapper.cpp
+ * alsa.cpp
  *
  *  Created on: May 4, 2013
  *      Author: nikita.karnauhov@gmail.com
  */
 
-#include "alsa_wrapper.h"
+#include "alsa.h"
 
 #include <stdarg.h>
 
