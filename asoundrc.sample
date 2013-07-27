@@ -19,4 +19,7 @@ pcm.unap {
 
     # Debug log file location.
     log "/tmp/unap_pcm.log"
+
+    # Log level, 0..4. Set to 0 to disable logging.
+    log_level 4
 }

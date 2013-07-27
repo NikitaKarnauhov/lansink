@@ -147,6 +147,10 @@ void _parse_options(int _nArgs, char *const _pArgs[]) {
         sp.parse_option(kv.first, kv.second);
 
     g_settings = sp.get();
+
+    if (g_settings.nLogLevel < llSilent || g_settings.nLogLevel >= llDebug)
+        throw RuntimeError("Invalid log level %d (must be between %d and %d)",
+                g_settings.nLogLevel, llSilent, llDebug);
 }
 
 static

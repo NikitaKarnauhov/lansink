@@ -7,6 +7,7 @@
 
 #include "unap.h"
 #include "formats.h"
+#include "exception.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -258,6 +259,19 @@ SND_PCM_PLUGIN_DEFINE_FUNC(unap) {
             snd_config_get_string(pEntry, &strValue);
             pPlug->log.open(strValue);
             pPlug->log.setLevel(llDebug);
+            continue;
+        }
+
+        if (strcmp(strField, "log_level") == 0) {
+            long int nLevel = 0;
+
+            snd_config_get_integer(pEntry, &nLevel);
+
+            if (nLevel < llSilent || nLevel >= llDebug)
+                throw RuntimeError("Invalid log level %d (must be between %d and %d)",
+                        nLevel, llSilent, llDebug);
+
+            pPlug->log.setLevel(LogLevel(nLevel));
             continue;
         }
 
