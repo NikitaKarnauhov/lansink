@@ -37,7 +37,7 @@ public:
     {
     }
 
-    int getError() const {
+    int get_error() const {
         return m_nError;
     }
 

@@ -282,10 +282,10 @@ void Player::Impl::run() {
                 } catch (ALSA::Error &e) {
                     m_pLog->warning(e.what());
 
-                    if (e.getError() == -EPIPE)
+                    if (e.get_error() == -EPIPE) {
                         ALSA::prepare(m_pPcm);
-                    else
-                        nLastError = e.getError();
+                    } else
+                        nLastError = e.get_error();
                 }
             }
         } catch (std::exception &e) {

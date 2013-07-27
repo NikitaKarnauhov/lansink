@@ -227,7 +227,7 @@ void _main(Log &_log) {
                 pPlayer->play(packet);
             }
         } catch (SystemError &se) {
-            if (se.getError() != EINTR)
+            if (se.get_error() != EINTR)
                 throw;
         }
 
