@@ -142,8 +142,10 @@ bool Lexer::_read_whitespace(Token &_tok) {
 }
 
 bool Lexer::_read_comment(Token &_tok) {
-    if (!m_is.good() || m_is.peek() != L'/')
+    if (!m_is.good() || (m_is.peek() != L'/' && m_is.peek() != L'#'))
         return false;
+
+    const bool bHash = m_is.peek() == L'#';
 
     m_is.ignore(1);
 
@@ -154,9 +156,9 @@ bool Lexer::_read_comment(Token &_tok) {
 
     enum class CommentKind { Single, Multi } ck;
 
-    if (m_is.peek() == L'/')
+    if (bHash || m_is.peek() == L'/')
         ck = CommentKind::Single;
-    else if (m_is.peek() == L'*')
+    else if (!bHash && m_is.peek() == L'*')
         ck = CommentKind::Multi;
     else {
         m_is.unget(); // Put back the initial slash.
@@ -164,7 +166,7 @@ bool Lexer::_read_comment(Token &_tok) {
     }
 
     _tok.kind = TK::Comment;
-    _append(_tok, L'/');
+    _append(_tok, bHash ? L'#' : L'/');
 
     wchar_t c;
 

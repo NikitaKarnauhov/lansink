@@ -1,23 +1,23 @@
-// Sample UNAP daemon configuration file.
+# Sample UNAP daemon configuration file.
 
-// Log file location.
+# Log file location.
 log-path "/var/log/unapd.log"
 
-// PID file location.
+# PID file location.
 pid-path "/var/run/unapd.pid"
 
-// Log level, 0..4. Set to 0 to disable logging.
+# Log level, 0..4. Set to 0 to disable logging.
 log-level 3
 
-// Enable running as a daemon.
+# Enable running as a daemon.
 daemon true
 
-// Incoming connection address.
+# Incoming connection address.
 host "127.0.0.1"
 port 26751
 
-// Output ALSA device.
+# Output ALSA device.
 alsa-device "pulse"
 
-// Seconds to wait after for stream data to reappear.
+# Seconds to wait after for stream data to reappear.
 recovery-timeout 120
