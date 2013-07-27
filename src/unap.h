@@ -59,7 +59,7 @@ public:
     void drain();
     void pause();
     void unpause();
-    snd_pcm_sframes_t get_unplayed_frames() const;
+    snd_pcm_sframes_t get_delay() const;
     void connect();
     const std::vector<unsigned int> &get_format_values();
     unsigned int get_channel_count() const;
@@ -82,10 +82,11 @@ private:
     mutable std::mutex m_mutex;
     int m_nSockWorker;
     TimePoint m_startTime;
+    TimePoint m_lastFrameTime;
     snd_pcm_sframes_t m_nLastFrames;
-    snd_pcm_sframes_t m_nAvail;
+    snd_pcm_sframes_t m_nFramesQueued;
     snd_pcm_sframes_t m_nPointer;
-    std::list<std::pair<char *, char *> > m_queue;
+    std::list<std::string> m_queue;
     std::unique_ptr<char[]> m_pBuffer;
     Status m_status;
     bool m_bPrepared;
@@ -98,6 +99,7 @@ private:
     std::function<void(void)> _make_worker();
     void _init_descriptors();
     snd_pcm_sframes_t _estimate_frames() const;
+    snd_pcm_sframes_t _get_frames_required() const;
     void _prepare_packet(unap::Packet &_packet, unap::Packet_Kind _kind, uint64_t _nTimestamp);
     void _send_buffer(const void *_pBuf, size_t _cSize);
     void _send_packet(const unap::Packet &_packet);

@@ -57,7 +57,7 @@ typedef std::set<Samples *, PtrLess<Samples> > SampleQueue;
 class Player::Impl {
 public:
     Impl(uint64_t _cStreamId, Log &_log) :
-        m_cStreamId(_cStreamId), m_pPcm(nullptr), m_cBufferSize(4096), m_cPeriodSize(256),
+        m_cStreamId(_cStreamId), m_pPcm(nullptr), m_cBufferSize(2048), m_cPeriodSize(512),
         m_format(SND_PCM_FORMAT_UNKNOWN), m_cRate(0), m_cChannelCount(0), m_cFrameBytes(0),
         m_cPosition(0), m_pLog(&_log), m_bReady(false), m_bPaused(false), m_bClosed(false) {}
 
@@ -99,6 +99,12 @@ private:
     bool m_bClosed;
     std::condition_variable m_dataAvailable;
 
+    typedef std::chrono::high_resolution_clock Clock;
+    typedef std::chrono::duration<int, std::milli> Duration;
+    typedef std::chrono::time_point<Clock> TimePoint;
+
+    TimePoint m_lastWrite;
+
     typedef std::map<uint64_t, Player *> Players;
     static Players s_players;
     static std::mutex s_playerMapMutex;
@@ -132,7 +138,8 @@ void Player::Impl::remove_stopped() {
 
     for (auto iPlayer = s_players.begin(); iPlayer != s_players.end();)
         if (!iPlayer->second->is_prepared()) {
-            iPlayer->second->m_pImpl->m_worker.join();
+            if (iPlayer->second->m_pImpl->m_worker.joinable())
+                iPlayer->second->m_pImpl->m_worker.join();
             delete iPlayer->second;
             iPlayer = s_players.erase(iPlayer);
         } else
@@ -142,6 +149,8 @@ void Player::Impl::remove_stopped() {
 void Player::Impl::init(unap::Packet &_packet) {
     try {
         snd_pcm_hw_params_t *pParams;
+
+        m_cChannelCount = _packet.channels();
 
         ALSA::open(&m_pPcm, g_settings.strALSADevice.c_str(), SND_PCM_STREAM_PLAYBACK, 0);
         ALSA::hw_params_malloc(&pParams);
@@ -157,6 +166,15 @@ void Player::Impl::init(unap::Packet &_packet) {
         ALSA::hw_params_set_period_size_near(m_pPcm, pParams, &m_cPeriodSize, NULL);
         ALSA::hw_params(m_pPcm, pParams);
         ALSA::hw_params_free(pParams);
+
+        snd_pcm_sw_params_t *pSWParams;
+
+        snd_pcm_sw_params_alloca(&pSWParams);
+        snd_pcm_sw_params_current(m_pPcm, pSWParams);
+        snd_pcm_sw_params_set_start_threshold(m_pPcm, pSWParams,
+                std::numeric_limits<snd_pcm_uframes_t>::max());
+        snd_pcm_sw_params(m_pPcm, pSWParams);
+
         ALSA::prepare(m_pPcm);
 
         m_cFrameBytes = ALSA::format_physical_width(get_format(_packet.format()))*_packet.channels()/8;
@@ -185,27 +203,12 @@ void Player::Impl::play(unap::Packet &_packet) {
     if (m_cPosition <= _packet.timestamp()) {
         m_queue.insert(new Samples(_packet));
 
-        if (m_cPosition == 0)
-            m_cPosition = _packet.timestamp();
+        if (m_cPosition < (*m_queue.begin())->cTimestamp)
+            m_cPosition = (*m_queue.begin())->cTimestamp;
     }
 
     if (!m_queue.empty())
         m_dataAvailable.notify_all();
-
-    // Dump data.
-//        static int nCount = 0;
-//        std::stringstream ss;
-//        ss << "dump_" << std::setw(10) << std::setfill('0') << ++nCount << ".pcm";
-//        std::ofstream ofs(ss.str());
-//        ofs.write(_packet.samples().c_str(), _packet.samples().size());
-//        size_t cFrames = _packet.samples().size()/4;
-//
-//        std::cerr << cFrames << std::endl;
-//
-//        if ((err = snd_pcm_writei(playback_handle, _packet.samples().c_str(), cFrames)) != cFrames) {
-//            fprintf (stderr, "write to audio interface failed (%s)\n",
-//                 snd_strerror (err));
-//        }
 }
 
 void Player::Impl::run() {
@@ -267,22 +270,40 @@ void Player::Impl::run() {
                     if (m_queue.empty())
                         continue;
 
-                    // Fill up initial portion.
-                    if (m_cPosition < 2*m_cPeriodSize) {
-                        _add_samples(2*m_cPeriodSize - m_cPosition, true);
-                        continue;
-                    }
-
                     snd_pcm_sframes_t nFrames = ALSA::avail_update(m_pPcm);
 
-                    if (nFrames > 0 && !m_queue.empty()) {
+                    m_pLog->debug("%d frames can be written", nFrames);
+
+                    // Otherwise fill up initial portion.
+                    if (nFrames > 0 && m_cPosition >= 2*m_cPeriodSize)
                         nFrames = nFrames > (snd_pcm_sframes_t)m_cPeriodSize ? m_cPeriodSize : nFrames;
-                        _add_samples(nFrames, true);
+
+                    snd_pcm_sframes_t nDelay;
+
+#ifndef NDEBUG
+                    snd_pcm_delay(m_pPcm, &nDelay);
+                    Duration ms(std::chrono::duration_cast<Duration>(Clock::now() - m_lastWrite));
+                    m_pLog->debug("Time since last write: %d ms; delay: %d; state: %d",
+                            ms.count(), nDelay, snd_pcm_state(m_pPcm));
+#endif
+
+                    _add_samples(nFrames, true);
+                    m_lastWrite = Clock::now();
+
+                    snd_pcm_delay(m_pPcm, &nDelay);
+
+                    if (snd_pcm_state(m_pPcm) == SND_PCM_STATE_PREPARED &&
+                            nDelay >= (snd_pcm_sframes_t)m_cBufferSize/2)
+                    {
+                        m_pLog->info("Startng playback (delay: %d)", nDelay);
+                        snd_pcm_start(m_pPcm);
                     }
                 } catch (ALSA::Error &e) {
                     m_pLog->warning(e.what());
 
                     if (e.get_error() == -EPIPE) {
+                        Duration ms(std::chrono::duration_cast<Duration>(Clock::now() - m_lastWrite));
+                        m_pLog->warning("XRUN: %d ms since last write", ms.count());
                         ALSA::prepare(m_pPcm);
                     } else
                         nLastError = e.get_error();
@@ -342,16 +363,24 @@ void Player::Impl::_add_samples(size_t _cSamples, bool _bStopWhenEmpty) {
             m_pLog->debug("Inserting silence: %d, %d", m_cPosition, cNext - m_cPosition);
 
         // Insert silence instead of missing samples.
-        while (m_cPosition < cNext) {
-            static char buf[16] = {0};
+        try {
+            while (m_cPosition < cNext) {
+                std::unique_ptr<char []> pBuf = std::unique_ptr<char []>(new char[cEnd - m_cPosition]);
+                const int nWritten = ALSA::writei(m_pPcm, pBuf.get(), cEnd - m_cPosition);
 
-            if (ALSA::writei(m_pPcm, buf, 1) != 1)
-                break;
+                m_cPosition += nWritten;
 
-            ++m_cPosition;
-
-            if (m_cPosition >= cEnd)
-                break;
+                if (m_cPosition >= cEnd)
+                    break;
+            }
+        } catch (ALSA::Error &e) {
+           if (e.get_error() == -EPIPE) {
+               Duration ms(std::chrono::duration_cast<Duration>(Clock::now() - m_lastWrite));
+               m_pLog->warning("XRUN: writei(), %d ms since last write", ms.count());
+               ALSA::prepare(m_pPcm);
+               m_cPosition = cNext;
+           } else
+               throw;
         }
 
         if (!pSamples)
@@ -365,17 +394,26 @@ void Player::Impl::_add_samples(size_t _cSamples, bool _bStopWhenEmpty) {
             m_pLog->debug("Inserting audio: %d, %d (%d)",
                     pSamples->cTimestamp + pSamples->cOffset, cWriteSize, m_cPosition);
 
-            const size_t cBytesWritten = ALSA::writei(m_pPcm,
-                    pSamples->getData(m_cFrameBytes), cWriteSize);
+            try {
+                const size_t cBytesWritten = ALSA::writei(m_pPcm,
+                        pSamples->getData(m_cFrameBytes), cWriteSize);
 
-            pSamples->cOffset += cBytesWritten;
-            m_cPosition += cBytesWritten;
+                pSamples->cOffset += cBytesWritten;
+                m_cPosition += cBytesWritten;
+            } catch (ALSA::Error &e) {
+               if (e.get_error() == -EPIPE) {
+                   Duration ms(std::chrono::duration_cast<Duration>(Clock::now() - m_lastWrite));
+                   m_pLog->warning("XRUN: writei(), %d ms since last write", ms.count());
+                   ALSA::prepare(m_pPcm);
+               } else
+                   throw;
+            }
         }
 
         if (pSamples->cOffset*m_cFrameBytes < pSamples->data.size())
             m_queue.insert(pSamples);
         else
-            delete pSamples; // Possible leak if writei() above throws an exception.
+            delete pSamples;
 
         if (m_queue.empty() && _bStopWhenEmpty)
             break;

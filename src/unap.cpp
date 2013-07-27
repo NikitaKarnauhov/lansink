@@ -77,51 +77,33 @@ snd_pcm_sframes_t UNAP::get_buffer_pointer() const {
     if (!m_bPrepared)
         return 0;
 
-    const snd_pcm_sframes_t frames = _estimate_frames();
-    snd_pcm_sframes_t nPointer = std::min(frames, m_nPointer)%get_buffer_size();
-    std::lock_guard<std::mutex> lock(m_mutex);
+    const snd_pcm_sframes_t nDelay = get_delay();
+    snd_pcm_sframes_t nPointer = snd_pcm_sframes_t(this->appl_ptr) - nDelay;
 
-    if (nPointer == 0 && m_queue.empty() && m_nPointer > 0 && frames > 0)
-        nPointer = get_buffer_size(); // Nothing more to play, buffer must have ran out.
+    if (nPointer < 0) {
+        nPointer += get_buffer_size();
 
-    return nPointer;
+        if (nPointer < 0)
+            nPointer = 0;
+    }
+
+    return nPointer%get_buffer_size();
 }
 
 snd_pcm_sframes_t UNAP::transfer(const char *_pData, size_t _cOffset, size_t _cSize) {
     assert(m_bPrepared);
 
     std::lock_guard<std::mutex> lock(m_mutex);
-
-    size_t cSizeBytes = std::min<size_t>(_cSize, get_buffer_size() - m_nAvail);
-
-    _cSize = cSizeBytes;
-    cSizeBytes *= get_bytes_per_frame();
+    const size_t cSizeBytes = _cSize*get_bytes_per_frame();
 
     if (cSizeBytes == 0)
         return 0;
 
-    char *pStart = m_pBuffer.get();
-    char *pDest = m_queue.empty() ? m_pBuffer.get() : m_queue.back().second;
     const char *pSrc = _pData + _cOffset*get_bytes_per_frame();
-    const size_t cBufferBytes = get_buffer_size()*get_bytes_per_frame();
 
-    if (pDest < pStart + cBufferBytes) {
-        const size_t cPart = std::min(cSizeBytes, cBufferBytes - (pDest - pStart));
-        memcpy(pDest, pSrc, cPart);
-        m_queue.emplace_back(pDest, pDest + cPart);
-        cSizeBytes -= cPart;
-        pSrc += cPart;
-        assert(m_queue.back().second > m_queue.back().first);
-    }
-
-    if (cSizeBytes > 0) {
-        assert(cSizeBytes < cBufferBytes);
-        memcpy(pStart, pSrc, cSizeBytes);
-        m_queue.emplace_back(pStart, pStart + cSizeBytes);
-        assert(m_queue.back().second > m_queue.back().first);
-    }
-
-    m_nAvail += _cSize;
+    m_lastFrameTime = Clock::now();
+    m_queue.emplace_back(pSrc, pSrc + cSizeBytes);
+    m_nFramesQueued += _cSize;
 
     return _cSize;
 }
@@ -132,7 +114,7 @@ void UNAP::prepare() {
     const size_t cOldChannels = m_cChannels;
 
     _reset(true);
-    m_nAvail = 0;
+    m_nFramesQueued = 0;
     m_strFormat = get_format_name(get_format());
     m_cBitsPerSample = snd_pcm_format_physical_width(get_format());
     m_cChannels = get_channel_count();
@@ -167,8 +149,22 @@ void UNAP::unpause() {
     m_startTime = Clock::now();
 }
 
-snd_pcm_sframes_t UNAP::get_unplayed_frames() const {
-    return m_nAvail; // TODO m_nPosition - estimateFrames
+snd_pcm_sframes_t UNAP::get_delay() const {
+    if (!m_bPrepared)
+        return get_buffer_size();
+
+    const snd_pcm_sframes_t nEstimated = _estimate_frames();
+    const snd_pcm_sframes_t nDelay = std::max<snd_pcm_sframes_t>(0,
+            snd_pcm_sframes_t(this->appl_ptr) - nEstimated);
+
+    if (nDelay > (snd_pcm_sframes_t)get_buffer_size())
+        this->log.warning("nDelay > get_buffer_size() (%d > %d)",
+                nDelay, get_buffer_size());
+
+    if (nDelay == 0)
+       this->log.warning("XRUN, nDelay == 0");
+
+    return nDelay;
 }
 
 void UNAP::_reset(bool _bResetStreamParams) {
@@ -177,7 +173,7 @@ void UNAP::_reset(bool _bResetStreamParams) {
     m_startTime = TimePoint();
 
     if (_bResetStreamParams) {
-        m_nAvail = 0;
+        m_nFramesQueued = 0;
         m_strFormat = "";
         m_cBitsPerSample = 0;
         m_queue.clear();
@@ -210,10 +206,15 @@ void UNAP::_init_descriptors() {
 }
 
 snd_pcm_sframes_t UNAP::_estimate_frames() const {
-    if (m_status == usPaused)
+    if ((m_status & usRunning) == 0 || m_status == usPaused)
         return m_nLastFrames;
     Duration ms(std::chrono::duration_cast<Duration>(Clock::now() - m_startTime));
     return m_nLastFrames + ms.count()*(get_rate()/1000.0);
+}
+
+snd_pcm_sframes_t UNAP::_get_frames_required() const {
+    Duration ms(std::chrono::duration_cast<Duration>(Clock::now() - m_lastFrameTime));
+    return ms.count()*get_rate()/1000;
 }
 
 std::function<void(void)> UNAP::_make_worker() {
@@ -222,6 +223,7 @@ std::function<void(void)> UNAP::_make_worker() {
             return;
 
         Status prev = usRunning;
+        const int nSendThresholdFrames = (this->nMTU - 100)/get_bytes_per_frame();
 
         while (m_status & usRunning) {
             if (prev == usRunning && m_status == usPaused)
@@ -229,20 +231,28 @@ std::function<void(void)> UNAP::_make_worker() {
             else if (prev == usPaused && m_status == usRunning)
                 _send_unpause();
 
-            if (!m_queue.empty()) {
+            {
                 std::lock_guard<std::mutex> lock(m_mutex);
 
-                while (!m_queue.empty())
-                    _send_data();
-            } else if (m_bPrepared && m_status == UNAP::usStopping && _estimate_frames() >= m_nPointer) {
-                _send_stop();
-                m_status = UNAP::usStopped;
+                if (!m_queue.empty()) {
+                    while (!m_queue.empty() && (
+                            m_status != UNAP::usRunning ||
+                            m_nFramesQueued >= nSendThresholdFrames))
+                        _send_data();
+                } else if (m_bPrepared && m_status == UNAP::usStopping && _estimate_frames() >= m_nPointer) {
+                    _send_stop();
+                    m_status = UNAP::usStopped;
+                }
             }
 
-            char buf[1] = {0};
-            write(m_nSockWorker, buf, 1);
+            // Don't wake up the other party unless there is buffer space available.
+            if (get_delay() < (snd_pcm_sframes_t)get_buffer_size()) {
+                char buf[1] = {0};
+                write(m_nSockWorker, buf, 1);
+            }
+
             prev = m_status;
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     };
 }
@@ -302,7 +312,6 @@ void UNAP::_send_unpause() {
 void UNAP::_send_data() {
     unap::Packet packet;
 
-    assert(m_queue.front().second > m_queue.front().first);
     assert(m_bPrepared);
     _prepare_packet(packet, unap::Packet_Kind_DATA, m_nPointer);
 
@@ -312,11 +321,11 @@ void UNAP::_send_data() {
     size_t cBytes = cTotal;
     auto pBuf = std::unique_ptr<char[]>(new char[this->nMTU]); // Reuse as serialization buffer.
     char *pPos = pBuf.get();
+    size_t cOffset = 0;
 
     while (!m_queue.empty() && cBytes > 0) {
-        char *pSource = m_queue.front().first;
-        char *pEnd = m_queue.front().second;
-        const size_t cAvailable = pEnd - pSource;
+        const char *pSource = m_queue.front().data() + cOffset;
+        const size_t cAvailable = m_queue.front().size() - cOffset;
 
         if (cAvailable > 0) {
             const size_t c = std::min(cAvailable, (cBytes/cFrameSize)*cFrameSize);
@@ -326,22 +335,23 @@ void UNAP::_send_data() {
 
             memcpy(pPos, pSource, c);
 
-            pSource += c;
             pPos += c;
             cBytes -= c;
+            cOffset += c;
         }
 
-        m_queue.front().first = pSource;
-
-        assert(m_queue.front().second >= m_queue.front().first);
-
-        if (pSource == pEnd)
+        if (cOffset == m_queue.front().size()) {
             m_queue.pop_front();
+            cOffset = 0;
+        }
     }
+
+    if (cOffset > 0 && !m_queue.empty() && cOffset < m_queue.front().size())
+        m_queue.front() = m_queue.front().substr(cOffset);
 
     packet.set_samples((const void *)pBuf.get(), cTotal - cBytes);
     m_nPointer += (cTotal - cBytes)/get_bytes_per_frame();
-    m_nAvail -= (cTotal - cBytes)/get_bytes_per_frame();
+    m_nFramesQueued -= (cTotal - cBytes)/get_bytes_per_frame();
 
     // Send.
     assert(packet.ByteSize() <= this->nMTU);
