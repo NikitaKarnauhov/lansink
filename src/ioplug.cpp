@@ -24,11 +24,6 @@
 #include <iostream>
 #include <iomanip>
 
-#define DEBUG() \
-    do { \
-        std::cerr << __FILE__ << ":" << __LINE__ << ": " << __FUNCTION__ << std::endl << std::flush; \
-    } while (0)
-
 namespace callbacks {
 
 extern "C" {
@@ -213,6 +208,10 @@ SND_PCM_PLUGIN_DEFINE_FUNC(unap) {
     snd_config_iterator_t i, next;
     UNAP *pPlug = new(calloc(1, sizeof(UNAP))) UNAP;
 
+    snd_config_t *pRates = nullptr;
+    snd_config_t *pChannels = nullptr;
+    snd_config_t *pFormats = nullptr;
+
     snd_config_for_each(i, next, conf) {
         snd_config_t *pEntry = snd_config_iterator_entry(i);
         const char *strField;
@@ -236,24 +235,17 @@ SND_PCM_PLUGIN_DEFINE_FUNC(unap) {
         }
 
         if (strcmp(strField, "rate") == 0) {
-            pPlug->rateValues.emplace_back();
-            snd_config_get_integer(pEntry, (long int *)&pPlug->rateValues.back());
+            pRates = pEntry;
             continue;
         }
 
         if (strcmp(strField, "channels") == 0) {
-            pPlug->channelValues.emplace_back();
-            snd_config_get_integer(pEntry, (long int *)&pPlug->channelValues.back());
+            pChannels = pEntry;
             continue;
         }
 
         if (strcmp(strField, "format") == 0) {
-            snd_config_get_string(pEntry, &strValue);
-            auto iFormat = g_formats.find(strValue);
-            if (iFormat == g_formats.end())
-                SNDERR("Unknown format %s", strValue);
-            else
-                pPlug->formats.push_back(iFormat->first);
+            pFormats = pEntry;
             continue;
         }
 
@@ -273,22 +265,74 @@ SND_PCM_PLUGIN_DEFINE_FUNC(unap) {
         return -EINVAL;
     }
 
+    if (pFormats) {
+        if (snd_config_get_type(pFormats) != SND_CONFIG_TYPE_COMPOUND) {
+            SNDERR("Formats definition must be a compound");
+            return -EINVAL;
+        }
+
+        snd_config_for_each(i, next, pFormats) {
+            snd_config_t *pEntry = snd_config_iterator_entry(i);
+            const char *strField;
+            const char *strValue;
+
+            if (snd_config_get_id(pEntry, &strField) < 0)
+                continue;
+
+            snd_config_get_string(pEntry, &strValue);
+            auto iFormat = g_formats.find(strValue);
+
+            if (iFormat == g_formats.end())
+                SNDERR("Unknown format %s", strValue);
+            else
+                pPlug->formats.push_back(iFormat->first);
+        }
+    } else
+        pPlug->formats = {"U8", "S16_LE", "S16_BE", "S32_LE", "S32_BE", "FLOAT_LE", "FLOAT_BE",
+                "MU_LAW", "A_LAW"};
+
+    if (pChannels) {
+        if (snd_config_get_type(pChannels) != SND_CONFIG_TYPE_COMPOUND) {
+            SNDERR("Channels definition must be a compound");
+            return -EINVAL;
+        }
+
+        snd_config_for_each(i, next, pChannels) {
+            snd_config_t *pEntry = snd_config_iterator_entry(i);
+            const char *strField;
+
+            if (snd_config_get_id(pEntry, &strField) < 0)
+                continue;
+
+            pPlug->channelValues.emplace_back();
+            snd_config_get_integer(pEntry, (long int *)&pPlug->channelValues.back());
+        }
+    } else
+        pPlug->channelValues = {1, 2};
+
+    if (pRates) {
+        if (snd_config_get_type(pRates) != SND_CONFIG_TYPE_COMPOUND) {
+            SNDERR("Rates definition must be a compound");
+            return -EINVAL;
+        }
+
+        snd_config_for_each(i, next, pRates) {
+            snd_config_t *pEntry = snd_config_iterator_entry(i);
+            const char *strField;
+
+            if (snd_config_get_id(pRates, &strField) < 0)
+                continue;
+
+            pPlug->rateValues.emplace_back();
+            snd_config_get_integer(pEntry, (long int *)&pPlug->rateValues.back());
+        }
+    } else
+        pPlug->rateValues = {44100, 48000};
+
     pPlug->connect();
     pPlug->version = SND_PCM_IOPLUG_VERSION;
     pPlug->name = "UNAP Protocol";
     pPlug->mmap_rw = 0;
-
-    // Sensible defaults for sample format, rate and channel count.
-    if (pPlug->get_format_values().empty())
-        pPlug->formats = {"U8", "S16_LE", "S16_BE", "S32_LE", "S32_BE", "FLOAT_LE", "FLOAT_BE",
-                "MU_LAW", "A_LAW"};
-
-    if (pPlug->channelValues.empty())
-        pPlug->channelValues = {1, 2};
-
-    if (pPlug->rateValues.empty())
-        pPlug->rateValues = {44100, 48000};
-
     pPlug->callback = &callbacks::get();
     pPlug->private_data = pPlug;
 

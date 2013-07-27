@@ -1,0 +1,22 @@
+pcm.unap {
+    type unap
+
+    # Receiver address.
+    host "127.0.0.1"
+    port 26751
+
+    # Sample rates. 
+    rate [ 44100 48000 ]
+
+    # Number of channels.
+    channels [ 1 2 ]
+
+    # Sample formats.
+    format [ U8 S16_LE S16_BE S32_LE S32_BE FLOAT_LE FLOAT_BE MU_LAW A_LAW ]
+
+    # Largest packet size. See ifconfig(8).
+    mtu 1500
+
+    # Debug log file location.
+    log "/tmp/unap_pcm.log"
+}
