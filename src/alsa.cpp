@@ -13,7 +13,8 @@ int ALSA::open(snd_pcm_t **_ppPcm, const char *_strName, snd_pcm_stream_t _strea
     const int nResult = snd_pcm_open(_ppPcm, _strName, _stream, _nMode);
 
     if (nResult < 0)
-        throw Error(nResult, "Cannot open audio device %s", _strName);
+        throw Error(nResult, "snd_pcm_open(name = %s, stream = %d, mode = %d)",
+                _strName, _stream, _nMode);
 
     return nResult;
 }
@@ -22,7 +23,7 @@ int ALSA::hw_params_malloc(snd_pcm_hw_params_t **_ppParams) {
     const int nResult = snd_pcm_hw_params_malloc(_ppParams);
 
     if (nResult < 0)
-        throw Error(nResult, "Cannot allocate hardware parameter structure");
+        throw Error(nResult, "snd_pcm_hw_params_malloc()");
 
     return nResult;
 }
@@ -31,7 +32,7 @@ int ALSA::hw_params_any(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams) {
     const int nResult = snd_pcm_hw_params_any(_pPcm, _pParams);
 
     if (nResult < 0)
-        throw Error(nResult, "Cannot initialize hardware parameter structure");
+        throw Error(nResult, "snd_pcm_hw_params_any()");
 
     return nResult;
 }
@@ -42,7 +43,7 @@ int ALSA::hw_params_set_access(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams,
     const int nResult = snd_pcm_hw_params_set_access(_pPcm, _pParams, _access);
 
     if (nResult < 0)
-        throw Error(nResult, "Cannot set access type");
+        throw Error(nResult, "snd_pcm_hw_params_set_access(_access = %d)", _access);
 
     return nResult;
 }
@@ -53,7 +54,7 @@ int ALSA::hw_params_set_format(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams,
     const int nResult = snd_pcm_hw_params_set_format(_pPcm, _pParams, _format);
 
     if (nResult < 0)
-        throw Error(nResult, "Cannot set sample format");
+        throw Error(nResult, "snd_pcm_hw_params_set_format(format = %d)", _format);
 
     return nResult;
 }
@@ -64,7 +65,7 @@ int ALSA::hw_params_set_rate_near(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParam
     const int nResult = snd_pcm_hw_params_set_rate_near(_pPcm, _pParams, _puRate, _pnDir);
 
     if (nResult < 0)
-        throw Error(nResult, "Cannot set sample rate");
+        throw Error(nResult, "snd_pcm_hw_params_set_rate_near()");
 
     return nResult;
 }
@@ -75,7 +76,7 @@ int ALSA::hw_params_set_channels(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams
     const int nResult = snd_pcm_hw_params_set_channels(_pPcm, _pParams, _uChannels);
 
     if (nResult < 0)
-        throw Error(nResult, "Cannot set channel count");
+        throw Error(nResult, "snd_pcm_hw_params_set_channels(val = %u)", _uChannels);
 
     return nResult;
 }
@@ -86,7 +87,7 @@ int ALSA::hw_params_set_buffer_size_near(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *
     const int nResult = snd_pcm_hw_params_set_buffer_size_near(_pPcm, _pParams, _puSize);
 
     if (nResult < 0)
-        throw Error(nResult, "Cannot set buffer size");
+        throw Error(nResult, "snd_pcm_hw_params_set_buffer_size_near()");
 
     return nResult;
 }
@@ -97,7 +98,7 @@ int ALSA::hw_params_set_period_size_near(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *
     const int nResult = snd_pcm_hw_params_set_period_size_near(_pPcm, _pParams, _puSize, _pnDir);
 
     if (nResult < 0)
-        throw Error(nResult, "Cannot set period size");
+        throw Error(nResult, "snd_pcm_hw_params_set_period_size_near()");
 
     return nResult;
 }
@@ -106,7 +107,7 @@ int ALSA::hw_params(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams) {
     const int nResult = snd_pcm_hw_params(_pPcm, _pParams);
 
     if (nResult < 0)
-        throw Error(nResult, "Cannot set hardware parameters");
+        throw Error(nResult, "snd_pcm_hw_params()");
 
     return nResult;
 }
@@ -119,7 +120,7 @@ int ALSA::prepare(snd_pcm_t *_pPcm) {
     const int nResult = snd_pcm_prepare(_pPcm);
 
     if (nResult < 0)
-        throw Error(nResult, "Cannot prepare audio interface for use");
+        throw Error(nResult, "snd_pcm_prepare()");
 
     return nResult;
 }
@@ -128,7 +129,7 @@ int ALSA::drain(snd_pcm_t *_pPcm) {
     const int nResult = snd_pcm_drain(_pPcm);
 
     if (nResult < 0)
-        throw Error(nResult, "Cannot drain audio device");
+        throw Error(nResult, "snd_pcm_drain()");
 
     return nResult;
 }
@@ -137,7 +138,7 @@ int ALSA::close(snd_pcm_t *_pPcm) {
     const int nResult = snd_pcm_close(_pPcm);
 
     if (nResult < 0)
-        throw Error(nResult, "Cannot close audio device");
+        throw Error(nResult, "snd_pcm_close()");
 
     return nResult;
 }
@@ -148,7 +149,7 @@ snd_pcm_sframes_t ALSA::writei(snd_pcm_t *_pPcm, const void *_pBuffer,
     const int nResult = snd_pcm_writei(_pPcm, _pBuffer, _cSize);
 
     if (nResult < 0)
-        throw Error(nResult, "Failed writing to audio device");
+        throw Error(nResult, "snd_pcm_writei(size = %u)", _cSize);
 
     return nResult;
 }
@@ -157,7 +158,7 @@ int ALSA::recover(snd_pcm_t *_pPcm, int _nError, bool _bSilent) {
     const int nResult = snd_pcm_recover(_pPcm, _nError, _bSilent);
 
     if (nResult < 0)
-        throw Error(nResult, "Cannot recover audio device");
+        throw Error(nResult, "snd_pcm_recover(error = %d, silent = %d)", _nError, _bSilent);
 
     return nResult;
 }
@@ -166,7 +167,7 @@ int ALSA::wait(snd_pcm_t *_pPcm, int _nTimeout) {
     const int nResult = snd_pcm_wait(_pPcm, _nTimeout);
 
     if (nResult < 0)
-        throw Error(nResult, "Failed polling audio device");
+        throw Error(nResult, "snd_pcm_wait(timeout = %d)", _nTimeout);
 
     return nResult;
 }
@@ -175,7 +176,7 @@ snd_pcm_sframes_t ALSA::avail_update(snd_pcm_t *_pPcm) {
     const int nResult = snd_pcm_avail_update(_pPcm);
 
     if (nResult < 0)
-        throw Error(nResult, "Failed querying available buffer");
+        throw Error(nResult, "snd_pcm_avail_update()");
 
     return nResult;
 }
@@ -184,7 +185,7 @@ int ALSA::pause(snd_pcm_t *_pPcm, bool _bEnable) {
     const int nResult = snd_pcm_pause(_pPcm, _bEnable);
 
     if (nResult < 0)
-        throw Error(nResult, "Cannot %s audio device", _bEnable ? "pause" : "unpause");
+        throw Error(nResult, "snd_pcm_pause(enable = %d)", _bEnable);
 
     return nResult;
 }
@@ -193,7 +194,98 @@ unsigned int ALSA::format_physical_width(snd_pcm_format_t _format) {
     const int nResult = snd_pcm_format_physical_width(_format);
 
     if (nResult < 0)
-        throw Error(nResult, "Unknown format %d", _format);
+        throw Error(nResult, "snd_pcm_format_physical_width(format = %d)", _format);
 
     return nResult;
+}
+
+int ALSA::start(snd_pcm_t *_pPcm) {
+    const int nResult = snd_pcm_start(_pPcm);
+
+    if (nResult < 0)
+        throw Error(nResult, "snd_pcm_start()");
+
+    return nResult;
+}
+
+int ALSA::ioplug_set_param_list(snd_pcm_ioplug_t *_pIO, int _nType,
+        unsigned int _cNumList, const unsigned int *_pcList)
+{
+    const int nResult = snd_pcm_ioplug_set_param_list(_pIO, _nType, _cNumList, _pcList);
+
+    if (nResult < 0)
+        throw Error(nResult, "snd_pcm_ioplug_set_param_list(type = %d, num_list = %u)",
+                _nType, _cNumList);
+
+    return nResult;
+}
+
+int ALSA::ioplug_set_param_minmax(snd_pcm_ioplug_t *_pIO, int _nType,
+        unsigned int _cMin, unsigned int _cMax)
+{
+    const int nResult = snd_pcm_ioplug_set_param_minmax(_pIO, _nType, _cMin, _cMax);
+
+    if (nResult < 0)
+        throw Error(nResult, "snd_pcm_ioplug_set_param_minmax(type = %d, min = %u, max = %u)",
+                _nType, _cMin, _cMax);
+
+    return nResult;
+}
+
+int ALSA::ioplug_create(snd_pcm_ioplug_t *_pIO, const char *_strName,
+              snd_pcm_stream_t _stream, int _nMode)
+{
+    const int nResult = snd_pcm_ioplug_create(_pIO, _strName, _stream, _nMode);
+
+    if (nResult < 0)
+        throw Error(nResult, "snd_pcm_ioplug_create(name = %s, stream = %d, mode = %d)",
+                _strName, _stream, _nMode);
+
+    return nResult;
+}
+
+void ALSA::sw_params_alloca(snd_pcm_sw_params_t **_ppSWParams) {
+    snd_pcm_sw_params_alloca(_ppSWParams);
+}
+
+int ALSA::sw_params_current(snd_pcm_t *_pPcm, snd_pcm_sw_params_t *_pParams) {
+    const int nResult = snd_pcm_sw_params_current(_pPcm, _pParams);
+
+    if (nResult < 0)
+        throw Error(nResult, "snd_pcm_sw_params_current()");
+
+    return nResult;
+}
+
+int ALSA::sw_params_set_start_threshold(snd_pcm_t *_pPcm,
+        snd_pcm_sw_params_t *_pParams, snd_pcm_uframes_t _cVal)
+{
+    const int nResult = snd_pcm_sw_params_set_start_threshold(_pPcm, _pParams, _cVal);
+
+    if (nResult < 0)
+        throw Error(nResult, "snd_pcm_sw_params_set_start_threshold(val = %u)", _cVal);
+
+    return nResult;
+}
+
+int ALSA::sw_params(snd_pcm_t *_pPcm, snd_pcm_sw_params_t *_pParams) {
+    const int nResult = snd_pcm_sw_params(_pPcm, _pParams);
+
+    if (nResult < 0)
+        throw Error(nResult, "snd_pcm_sw_params()");
+
+    return nResult;
+}
+
+int ALSA::delay(snd_pcm_t *_pPcm, snd_pcm_sframes_t *_pDelay) {
+    const int nResult = snd_pcm_delay(_pPcm, _pDelay);
+
+    if (nResult < 0)
+        throw Error(nResult, "snd_pcm_delay()");
+
+    return nResult;
+}
+
+snd_pcm_state_t ALSA::state(snd_pcm_t *_pPcm) {
+    return snd_pcm_state(_pPcm);
 }

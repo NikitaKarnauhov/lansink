@@ -169,11 +169,11 @@ void Player::Impl::init(unap::Packet &_packet) {
 
         snd_pcm_sw_params_t *pSWParams;
 
-        snd_pcm_sw_params_alloca(&pSWParams);
-        snd_pcm_sw_params_current(m_pPcm, pSWParams);
-        snd_pcm_sw_params_set_start_threshold(m_pPcm, pSWParams,
+        ALSA::sw_params_alloca(&pSWParams);
+        ALSA::sw_params_current(m_pPcm, pSWParams);
+        ALSA::sw_params_set_start_threshold(m_pPcm, pSWParams,
                 std::numeric_limits<snd_pcm_uframes_t>::max());
-        snd_pcm_sw_params(m_pPcm, pSWParams);
+        ALSA::sw_params(m_pPcm, pSWParams);
 
         ALSA::prepare(m_pPcm);
 
@@ -281,7 +281,7 @@ void Player::Impl::run() {
                     snd_pcm_sframes_t nDelay;
 
 #ifndef NDEBUG
-                    snd_pcm_delay(m_pPcm, &nDelay);
+                    ALSA::delay(m_pPcm, &nDelay);
                     Duration ms(std::chrono::duration_cast<Duration>(Clock::now() - m_lastWrite));
                     m_pLog->debug("Time since last write: %d ms; delay: %d; state: %d",
                             ms.count(), nDelay, snd_pcm_state(m_pPcm));
@@ -290,13 +290,13 @@ void Player::Impl::run() {
                     _add_samples(nFrames, true);
                     m_lastWrite = Clock::now();
 
-                    snd_pcm_delay(m_pPcm, &nDelay);
+                    ALSA::delay(m_pPcm, &nDelay);
 
-                    if (snd_pcm_state(m_pPcm) == SND_PCM_STATE_PREPARED &&
+                    if (ALSA::state(m_pPcm) == SND_PCM_STATE_PREPARED &&
                             nDelay >= (snd_pcm_sframes_t)m_cBufferSize/2)
                     {
                         m_pLog->info("Startng playback (delay: %d)", nDelay);
-                        snd_pcm_start(m_pPcm);
+                        ALSA::start(m_pPcm);
                     }
                 } catch (ALSA::Error &e) {
                     m_pLog->warning(e.what());

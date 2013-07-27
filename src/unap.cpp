@@ -8,6 +8,7 @@
 #include "unap.h"
 #include "formats.h"
 #include "exception.h"
+#include "alsa.h"
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -116,7 +117,7 @@ void UNAP::prepare() {
     _reset(true);
     m_nFramesQueued = 0;
     m_strFormat = get_format_name(get_format());
-    m_cBitsPerSample = snd_pcm_format_physical_width(get_format());
+    m_cBitsPerSample = ALSA::format_physical_width(get_format());
     m_cChannels = get_channel_count();
 
     if (m_strFormat != strOldFormat || m_cBitsPerSample != cOldRate ||

@@ -26,7 +26,7 @@ public:
 };
 
 using RuntimeError = Exception<std::runtime_error>;
-using LogicError = Exception<std::runtime_error>;
+using LogicError = Exception<std::logic_error>;
 
 class SystemError : public RuntimeError {
 public:

@@ -62,6 +62,7 @@ struct ALSA {
     static void hw_params_free(snd_pcm_hw_params_t *_pParams);
     static int prepare(snd_pcm_t *_pPcm);
 
+    static int start(snd_pcm_t *_pPcm);
     static int drain(snd_pcm_t *_pPcm);
     static snd_pcm_sframes_t writei(snd_pcm_t *_pPcm, const void *_pBuffer,
             snd_pcm_uframes_t _cSize);
@@ -69,6 +70,21 @@ struct ALSA {
     static int wait(snd_pcm_t *_pPcm, int _nTimeout);
     static snd_pcm_sframes_t avail_update(snd_pcm_t *_pPcm);
     static int pause(snd_pcm_t *_pPcm, bool _bEnable);
+    static int delay(snd_pcm_t *_pPcm, snd_pcm_sframes_t *_pDelay);
+    static snd_pcm_state_t state(snd_pcm_t *_pPcm);
+
+    static int ioplug_set_param_list(snd_pcm_ioplug_t *_pIO, int _nType,
+            unsigned int _cNumList, const unsigned int *_pcList);
+    static int ioplug_set_param_minmax(snd_pcm_ioplug_t *_pIO, int _nType,
+            unsigned int _cMin, unsigned int _cMax);
+    static int ioplug_create(snd_pcm_ioplug_t *_pIO, const char *_strName,
+                  snd_pcm_stream_t _stream, int _nMode);
+
+    static void sw_params_alloca(snd_pcm_sw_params_t **_ppSWParams);
+    static int sw_params_current(snd_pcm_t *_pPcm, snd_pcm_sw_params_t *_pParams);
+    static int sw_params_set_start_threshold(snd_pcm_t *_pPcm,
+            snd_pcm_sw_params_t *_pParams, snd_pcm_uframes_t _cVal);
+    static int sw_params(snd_pcm_t *_pPcm, snd_pcm_sw_params_t *_pParams);
 
     static unsigned int format_physical_width(snd_pcm_format_t _format);
 };
