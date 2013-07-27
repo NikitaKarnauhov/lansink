@@ -26,6 +26,7 @@
 #include <alsa/control.h>
 #include <alsa/pcm_external.h>
 
+#include "log.h"
 #include "unap.pb.h"
 
 class UNAP : public snd_pcm_ioplug_t {
@@ -36,6 +37,8 @@ public:
 
     std::vector<unsigned int> rateValues, channelValues;
     std::vector<std::string> formats;
+
+    mutable Log log;
 
     enum Status {
         usRunning = 0x40,

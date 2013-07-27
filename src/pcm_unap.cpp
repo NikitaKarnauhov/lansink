@@ -36,31 +36,45 @@ extern "C" {
 int unap_start(snd_pcm_ioplug_t *_pPlug) {
     UNAP *pPlug = (UNAP *)_pPlug->private_data;
     pPlug->start();
+    pPlug->log.debug("%s() = %d", __FUNCTION__, 0);
     return 0;
 }
 
 int unap_stop(snd_pcm_ioplug_t *_pPlug) {
     UNAP *pPlug = (UNAP *)_pPlug->private_data;
     pPlug->stop();
+    pPlug->log.debug("%s() = %d", __FUNCTION__, 0);
     return 0;
 }
 
 snd_pcm_sframes_t unap_pointer(snd_pcm_ioplug_t *_pPlug) {
     UNAP *pPlug = (UNAP *)_pPlug->private_data;
-    return pPlug->get_buffer_pointer();
+    const auto nResult = pPlug->get_buffer_pointer();
+
+    pPlug->log.debug("%s() = %d", __FUNCTION__, nResult);
+
+    return nResult;
 }
 
 snd_pcm_sframes_t unap_transfer(snd_pcm_ioplug_t *_pPlug, const snd_pcm_channel_area_t *_pAreas,
         snd_pcm_uframes_t _cOffset, snd_pcm_uframes_t _cSize)
 {
     UNAP *pPlug = (UNAP *)_pPlug->private_data;
-//    std::cerr << "avail = " << snd_pcm_avail_update(io->pcm) << std::endl;
     const size_t cFrames = pPlug->transfer((const char *)_pAreas->addr, _cOffset, _cSize);
 
     // Force start playing if buffer is full.
-    if (cFrames == 0 && _pPlug->state == SND_PCM_STATE_PREPARED)
-        if (int nError = snd_pcm_start(_pPlug->pcm))
+    if (cFrames == 0 && _pPlug->state == SND_PCM_STATE_PREPARED) {
+        pPlug->log.debug("Buffer is full, calling snd_pcm_start()");
+
+        if (int nError = snd_pcm_start(_pPlug->pcm)) {
+            pPlug->log.debug("%s() = %d, _cOffset = %d, _cSize = %d",
+                    __FUNCTION__, nError, _cOffset, _cSize);
             return nError;
+        }
+    }
+
+    pPlug->log.debug("%s() = %d, _cOffset = %d, _cSize = %d",
+            __FUNCTION__, cFrames, _cOffset, _cSize);
 
     return cFrames;
 }
@@ -68,6 +82,7 @@ snd_pcm_sframes_t unap_transfer(snd_pcm_ioplug_t *_pPlug, const snd_pcm_channel_
 int unap_close(snd_pcm_ioplug_t *_pPlug) {
     UNAP *pPlug = (UNAP *)_pPlug->private_data;
     pPlug->stop();
+    pPlug->log.debug("%s() = %d", __FUNCTION__, 0);
     delete pPlug;
     _pPlug->private_data = NULL;
     return 0;
@@ -76,12 +91,14 @@ int unap_close(snd_pcm_ioplug_t *_pPlug) {
 int unap_prepare(snd_pcm_ioplug_t *_pPlug) {
     UNAP *pPlug = (UNAP *)_pPlug->private_data;
     pPlug->prepare();
+    pPlug->log.debug("%s() = %d", __FUNCTION__, 0);
     return 0;
 }
 
 int unap_drain(snd_pcm_ioplug_t *_pPlug) {
     UNAP *pPlug = (UNAP *)_pPlug->private_data;
     pPlug->drain();
+    pPlug->log.debug("%s() = %d", __FUNCTION__, 0);
     return 0;
 }
 
@@ -93,6 +110,7 @@ int unap_pause(snd_pcm_ioplug_t *_pPlug, int _bEnable) {
     else
         pPlug->unpause();
 
+    pPlug->log.debug("%s() = %d, _bEnable = %d", __FUNCTION__, 0, _bEnable);
     return 0;
 }
 
@@ -102,18 +120,26 @@ int unap_poll_revents(snd_pcm_ioplug_t *_pPlug, struct pollfd *_pFD, unsigned in
     static char buf[1];
 
     assert(_pFD && _cFDs == 1 && _pREvents);
-    read(_pFD[0].fd, buf, 1);
     *_pREvents = _pFD[0].revents & ~(POLLIN | POLLOUT);
 
-    if (_pFD[0].revents & POLLIN)
-        *_pREvents |= POLLOUT;
+    UNAP *pPlug = (UNAP *)_pPlug->private_data;
 
+    if (_pFD[0].revents & POLLIN) {
+        read(_pFD[0].fd, buf, 1);
+        *_pREvents |= POLLOUT;
+        pPlug->log.debug("get_delay() = %d, get_buffer_size() = %d",
+                pPlug->get_delay(), pPlug->get_buffer_size());
+    }
+
+    pPlug->log.debug("%s() = %d, _pFD[0].revents = %d, *_pREvents = %d",
+            __FUNCTION__, 0, _pFD[0].revents, *_pREvents);
     return 0;
 }
 
 int unap_delay(snd_pcm_ioplug_t *_pPlug, snd_pcm_sframes_t *_pnDelay) {
     UNAP *pPlug = (UNAP *)_pPlug->private_data;
-    *_pnDelay = pPlug->get_unplayed_frames();
+    *_pnDelay = pPlug->get_delay();
+    pPlug->log.debug("%s() = %d; *_pnDelay = %d", __FUNCTION__, 0, *_pnDelay);
     return 0;
 }
 
@@ -127,17 +153,17 @@ snd_pcm_ioplug_callback_t &get() {
         s_callbacks.pointer = callbacks::unap_pointer;
         s_callbacks.transfer = callbacks::unap_transfer;
         s_callbacks.close = callbacks::unap_close;
-        s_callbacks.hw_params = nullptr; //callbacks::unapHWParams;
-        s_callbacks.hw_free = nullptr; //callbacks::unapHWFree;
-        s_callbacks.sw_params = nullptr; //callbacks::unapSWParams;
+        s_callbacks.hw_params = nullptr;
+        s_callbacks.hw_free = nullptr;
+        s_callbacks.sw_params = nullptr;
         s_callbacks.prepare = callbacks::unap_prepare;
         s_callbacks.drain = callbacks::unap_drain;
         s_callbacks.pause = callbacks::unap_pause;
-        s_callbacks.resume = nullptr; //callbacks::unapResume;
-        s_callbacks.poll_descriptors_count = nullptr; //poll_descriptors_count;
-        s_callbacks.poll_descriptors = nullptr; //poll_descriptors;
+        s_callbacks.resume = nullptr;
+        s_callbacks.poll_descriptors_count = nullptr;
+        s_callbacks.poll_descriptors = nullptr;
         s_callbacks.poll_revents = callbacks::unap_poll_revents;
-        s_callbacks.dump = nullptr; //callbacks::unapDump;
+        s_callbacks.dump = nullptr;
         s_callbacks.delay = callbacks::unap_delay;
         s_bInitialized = true;
     }
@@ -185,7 +211,6 @@ int _set_hw_constraint(struct UNAP *_pPlug)
 extern "C"
 SND_PCM_PLUGIN_DEFINE_FUNC(unap) {
     snd_config_iterator_t i, next;
-//    UNAPPlug *pPlug = new UNAPPlug;
     UNAP *pPlug = new(calloc(1, sizeof(UNAP))) UNAP;
 
     snd_config_for_each(i, next, conf) {
@@ -237,6 +262,13 @@ SND_PCM_PLUGIN_DEFINE_FUNC(unap) {
             continue;
         }
 
+        if (strcmp(strField, "log") == 0) {
+            snd_config_get_string(pEntry, &strValue);
+            pPlug->log.open(strValue);
+            pPlug->log.setLevel(llDebug);
+            continue;
+        }
+
         SNDERR("Unknown field %s", strField);
         return -EINVAL;
     }
@@ -272,7 +304,7 @@ SND_PCM_PLUGIN_DEFINE_FUNC(unap) {
 
     *pcmp = pPlug->pcm;
 
-    fprintf(stderr, "Initialized!\n");
+    pPlug->log.info("Initialized!");
 
     return 0;
 }

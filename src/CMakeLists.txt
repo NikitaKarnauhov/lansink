@@ -16,6 +16,7 @@ set(CLIENT_SOURCES
     formats.cpp
     alsa_wrapper.cpp
     utils.cpp
+    log.cpp
     ${CMAKE_CURRENT_BINARY_DIR}/unap.pb.cc
 )
 
