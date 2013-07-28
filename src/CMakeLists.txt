@@ -12,7 +12,7 @@ add_custom_command(
 )
 
 set(CLIENT_SOURCES
-    unap.cpp
+    sender.cpp
     ioplug.cpp
     formats.cpp
     alsa.cpp

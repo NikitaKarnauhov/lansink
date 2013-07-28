@@ -1,11 +1,11 @@
 /*
- * unap.cpp
+ * sender.cpp
  *
  *  Created on: Apr 2, 2013
  *      Author: nikita.karnauhov@gmail.com
  */
 
-#include "unap.h"
+#include "sender.h"
 #include "formats.h"
 #include "exception.h"
 #include "alsa.h"

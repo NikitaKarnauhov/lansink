@@ -1,12 +1,12 @@
 /*
- * unap.h
+ * sender.h
  *
  *  Created on: Apr 2, 2013
  *      Author: nikita.karnauhov@gmail.com
  */
 
-#ifndef UNAP_H_
-#define UNAP_H_
+#ifndef SENDER_H_
+#define SENDER_H_
 
 #include <functional>
 #include <string>
@@ -109,4 +109,4 @@ private:
     void _send_stop();
 };
 
-#endif /* UNAP_H_ */
+#endif /* SENDER_H_ */
