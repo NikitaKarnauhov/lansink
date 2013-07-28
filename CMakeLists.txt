@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 2.8)
 project(UNAP)
 
+include(GNUInstallDirs)
 include(FindPkgConfig)
 
 pkg_check_modules(ALSA alsa)
