@@ -193,7 +193,7 @@ void Player::Impl::init(unap::Packet &_packet) {
 
         snd_pcm_sw_params_t *pSWParams;
 
-        ALSA::sw_params_alloca(&pSWParams);
+        snd_pcm_sw_params_alloca(&pSWParams);
         ALSA::sw_params_current(m_pPcm, pSWParams);
         ALSA::sw_params_set_start_threshold(m_pPcm, pSWParams,
                 std::numeric_limits<snd_pcm_uframes_t>::max());

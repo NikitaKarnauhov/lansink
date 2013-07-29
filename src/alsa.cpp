@@ -268,10 +268,6 @@ int ALSA::ioplug_create(snd_pcm_ioplug_t *_pIO, const char *_strName,
     return nResult;
 }
 
-void ALSA::sw_params_alloca(snd_pcm_sw_params_t **_ppSWParams) {
-    snd_pcm_sw_params_alloca(_ppSWParams);
-}
-
 int ALSA::sw_params_current(snd_pcm_t *_pPcm, snd_pcm_sw_params_t *_pParams) {
     const int nResult = snd_pcm_sw_params_current(_pPcm, _pParams);
 

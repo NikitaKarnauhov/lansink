@@ -104,7 +104,6 @@ struct ALSA {
     static int ioplug_create(snd_pcm_ioplug_t *_pIO, const char *_strName,
                   snd_pcm_stream_t _stream, int _nMode);
 
-    static void sw_params_alloca(snd_pcm_sw_params_t **_ppSWParams);
     static int sw_params_current(snd_pcm_t *_pPcm, snd_pcm_sw_params_t *_pParams);
     static int sw_params_set_start_threshold(snd_pcm_t *_pPcm,
             snd_pcm_sw_params_t *_pParams, snd_pcm_uframes_t _cVal);
