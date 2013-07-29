@@ -160,7 +160,7 @@ void _parse_options(int _nArgs, char *const _pArgs[]) {
 
             default:
                 if (!optarg)
-                    throw LogicError("Option '%c' reuires argument", c);
+                    throw LogicError("Option '%c' requires argument", c);
 
                 kvs[longNames[c]] = optarg;
                 break;
