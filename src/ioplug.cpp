@@ -336,7 +336,7 @@ SND_PCM_PLUGIN_DEFINE_FUNC(unap) {
 
                 snd_config_get_integer(pEntry, &nLevel);
 
-                if (nLevel < llSilent || nLevel >= llDebug)
+                if (nLevel < llSilent || nLevel > llDebug)
                     throw RuntimeError("Invalid log level %d (must be between %d and %d)",
                             nLevel, llSilent, llDebug);
 
