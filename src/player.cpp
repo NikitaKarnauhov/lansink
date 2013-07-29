@@ -208,6 +208,11 @@ void Player::Impl::init(unap::Packet &_packet) {
     } catch (std::exception &e) {
         m_pLog->error(e.what());
         m_bReady = false;
+
+        if (m_pPcm) {
+            ALSA::close(m_pPcm);
+            m_pPcm = nullptr;
+        }
     }
 }
 

@@ -249,10 +249,15 @@ void _main(Log &_log) {
                     // FIXME handle 'device or resource busy'.
                     _log.info("New connection from %s", _in_addr_to_string(&sender).c_str());
                     pPlayer->init(packet);
-                    pPlayer->run();
+
+                    if (pPlayer->is_prepared())
+                        pPlayer->run();
+                    else
+                        pPlayer = nullptr;
                 }
 
-                pPlayer->play(packet);
+                if (pPlayer)
+                    pPlayer->play(packet);
             }
         } catch (SystemError &se) {
             if (se.get_error() != EINTR)
