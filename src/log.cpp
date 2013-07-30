@@ -190,3 +190,7 @@ void Log::log(LogLevel _level, const char *_strFormat, ...) {
     va_end (args);
     m_pImpl->log(_level, str);
 }
+
+LogLevel Log::getLevel() const {
+    return m_pImpl->m_level;
+}

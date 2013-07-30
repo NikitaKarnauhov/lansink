@@ -54,18 +54,21 @@ public:
     void close(const std::string &_strFilename);
 
     void setLevel(LogLevel _ll);
+    LogLevel getLevel() const;
 
     void log(LogLevel _level, const std::string &_strMessage);
     void log(LogLevel _level, const char *_strFormat, ...);
 
-#define LOG_LEVEL(_NAME, _LEVEL)                        \
-    void _NAME(const std::string &_strMessage) {        \
-        log(_LEVEL, _strMessage);                      \
-    }                                                   \
-                                                        \
-    template<typename... Args>                          \
-    void _NAME(const char *_strFormat, Args... _args) { \
-        log(_LEVEL, _strFormat, _args...);             \
+#define LOG_LEVEL(_NAME, _LEVEL)                            \
+    void _NAME(const std::string &_strMessage) {            \
+        if (getLevel() > llSilent && _LEVEL <= getLevel())  \
+            log(_LEVEL, _strMessage);                       \
+    }                                                       \
+                                                            \
+    template<typename... Args>                              \
+    void _NAME(const char *_strFormat, Args... _args) {     \
+        if (getLevel() > llSilent && _LEVEL <= getLevel())  \
+            log(_LEVEL, _strFormat, _args...);              \
     }
 
     LOG_LEVEL(error, llError);
