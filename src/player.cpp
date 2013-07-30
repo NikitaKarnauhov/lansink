@@ -272,7 +272,6 @@ void Player::Impl::run() {
                     m_pLog->info("Waiting for recovery (timeout %d seconds)",
                             g_settings.nRecoveryTimeout);
 
-                    // TODO signal 'cv' when queue becomes non-empty.
                     m_dataAvailable.wait_for(lock, std::chrono::seconds(g_settings.nRecoveryTimeout),
                             [&]() { return !m_queue.empty(); });
 
