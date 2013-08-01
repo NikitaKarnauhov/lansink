@@ -46,15 +46,81 @@
 #include <sstream>
 #include <fstream>
 #include <iomanip>
+#include <functional>
+#include <thread>
+#include <chrono>
+#include <list>
+#include <mutex>
 #include <random>
 
-unsigned int UNAP::s_cSeed = 0;
-std::default_random_engine UNAP::s_randomEngine = std::default_random_engine();
+class Sender::Impl {
+public:
+    typedef Sender::Status Status;
 
-UNAP::UNAP() :
-    strHost("127.0.0.1"), nPort(26751), nMTU(1500), nSendPeriod(10),
-    m_strFormat(""), m_cBitsPerSample(0), m_cChannels(0),
-    m_nSockWorker(0), m_status(usStopped), m_nSocket(-1),
+    Impl(Sender *_pPlug);
+    ~Impl();
+
+    Status get_status() const;
+    void start();
+    void stop();
+    snd_pcm_sframes_t get_buffer_pointer() const;
+    snd_pcm_sframes_t transfer(const char *_pData, size_t _cOffset, size_t _cSize);
+    void prepare();
+    void drain();
+    void pause();
+    void unpause();
+    snd_pcm_sframes_t get_delay() const;
+    void connect();
+    const std::vector<unsigned int> &get_format_values();
+    size_t get_bytes_per_frame() const;
+
+private:
+    typedef std::chrono::high_resolution_clock Clock;
+    typedef std::chrono::duration<int, std::milli> Duration;
+    typedef std::chrono::time_point<Clock> TimePoint;
+
+    Sender *m_pPlug;
+    std::vector<unsigned int> m_formatValues;
+    std::string m_strFormat;
+    size_t m_cBitsPerSample;
+    size_t m_cChannels;
+    std::thread m_worker;
+    mutable std::mutex m_mutex;
+    int m_nSockWorker;
+    TimePoint m_startTime;
+    TimePoint m_lastFrameTime;
+    snd_pcm_sframes_t m_nLastFrames;
+    snd_pcm_sframes_t m_nFramesQueued;
+    snd_pcm_sframes_t m_nPointer;
+    std::list<std::string> m_queue;
+    std::unique_ptr<char[]> m_pBuffer;
+    Status m_status;
+    bool m_bPrepared;
+    int m_nSocket;
+    static unsigned int s_cSeed;
+    static std::default_random_engine s_randomEngine;
+    uint64_t m_cStreamId;
+
+    void _reset(bool _bResetStreamParams);
+    std::function<void(void)> _make_worker();
+    void _init_descriptors();
+    snd_pcm_sframes_t _estimate_frames() const;
+    snd_pcm_sframes_t _get_frames_required() const;
+    void _prepare_packet(unap::Packet &_packet, unap::Packet_Kind _kind, uint64_t _nTimestamp);
+    void _send_buffer(const void *_pBuf, size_t _cSize);
+    void _send_packet(const unap::Packet &_packet);
+    void _send_data();
+    void _send_pause();
+    void _send_unpause();
+    void _send_stop();
+};
+
+unsigned int Sender::Impl::s_cSeed = 0;
+std::default_random_engine Sender::Impl::s_randomEngine = std::default_random_engine();
+
+Sender::Impl::Impl(Sender *_pPlug) :
+    m_pPlug(_pPlug), m_strFormat(""), m_cBitsPerSample(0), m_cChannels(0),
+    m_nSockWorker(0), m_status(Sender::usStopped), m_nSocket(-1),
     m_cStreamId(0)
 {
     if (s_cSeed == 0) {
@@ -72,50 +138,50 @@ UNAP::UNAP() :
     _init_descriptors();
 }
 
-UNAP::~UNAP() {
+Sender::Impl::~Impl() {
     if (m_nSocket >= -1)
         close(m_nSocket);
 }
 
-UNAP::Status UNAP::get_status() const {
+Sender::Status Sender::Impl::get_status() const {
     return m_status;
 }
 
-void UNAP::start() {
+void Sender::Impl::start() {
     _reset(false);
-    m_status = usRunning;
+    m_status = Sender::usRunning;
     m_startTime = Clock::now();
     m_worker = std::thread(_make_worker());
 }
 
-void UNAP::stop() {
-    if (m_status & usRunning)
+void Sender::Impl::stop() {
+    if (m_status & Sender::usRunning)
         _send_stop();
 
-    m_status = usStopped;
+    m_status = Sender::usStopped;
 
     if (m_worker.joinable())
         m_worker.join();
 }
 
-snd_pcm_sframes_t UNAP::get_buffer_pointer() const {
+snd_pcm_sframes_t Sender::Impl::get_buffer_pointer() const {
     if (!m_bPrepared)
         return 0;
 
     const snd_pcm_sframes_t nDelay = get_delay();
-    snd_pcm_sframes_t nPointer = snd_pcm_sframes_t(this->appl_ptr) - nDelay;
+    snd_pcm_sframes_t nPointer = snd_pcm_sframes_t(m_pPlug->appl_ptr) - nDelay;
 
     if (nPointer < 0) {
-        nPointer += get_buffer_size();
+        nPointer += m_pPlug->get_buffer_size();
 
         if (nPointer < 0)
             nPointer = 0;
     }
 
-    return nPointer%get_buffer_size();
+    return nPointer%m_pPlug->get_buffer_size();
 }
 
-snd_pcm_sframes_t UNAP::transfer(const char *_pData, size_t _cOffset, size_t _cSize) {
+snd_pcm_sframes_t Sender::Impl::transfer(const char *_pData, size_t _cOffset, size_t _cSize) {
     assert(m_bPrepared);
 
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -133,66 +199,66 @@ snd_pcm_sframes_t UNAP::transfer(const char *_pData, size_t _cOffset, size_t _cS
     return _cSize;
 }
 
-void UNAP::prepare() {
+void Sender::Impl::prepare() {
     const std::string strOldFormat = m_strFormat;
     const size_t cOldRate = m_cBitsPerSample;
     const size_t cOldChannels = m_cChannels;
 
     _reset(true);
     m_nFramesQueued = 0;
-    m_strFormat = get_format_name(get_format());
-    m_cBitsPerSample = ALSA::format_physical_width(get_format());
-    m_cChannels = get_channel_count();
+    m_strFormat = get_format_name(m_pPlug->get_format());
+    m_cBitsPerSample = ALSA::format_physical_width(m_pPlug->get_format());
+    m_cChannels = m_pPlug->get_channel_count();
 
     if (m_strFormat != strOldFormat || m_cBitsPerSample != cOldRate ||
             m_cChannels != cOldChannels)
         m_cStreamId = s_randomEngine();
 
     assert(get_bytes_per_frame() > 0);
-    assert(get_buffer_size() > 0);
-    std::unique_ptr<char[]> pBuffer(new char[get_buffer_size()*get_bytes_per_frame()]);
+    assert(m_pPlug->get_buffer_size() > 0);
+    std::unique_ptr<char[]> pBuffer(new char[m_pPlug->get_buffer_size()*get_bytes_per_frame()]);
     m_pBuffer = std::move(pBuffer);
     m_bPrepared = true;
 }
 
-void UNAP::drain() {
+void Sender::Impl::drain() {
     assert(m_bPrepared);
-    m_status = usStopping;
+    m_status = Sender::usStopping;
     if (m_worker.joinable())
         m_worker.join();
 }
 
-void UNAP::pause() {
-    assert(m_bPrepared && m_status == usRunning);
+void Sender::Impl::pause() {
+    assert(m_bPrepared && m_status == Sender::usRunning);
     m_nLastFrames = _estimate_frames();
-    m_status = usPaused;
+    m_status = Sender::usPaused;
     m_startTime = TimePoint();
 }
 
-void UNAP::unpause() {
-    m_status = usRunning;
+void Sender::Impl::unpause() {
+    m_status = Sender::usRunning;
     m_startTime = Clock::now();
 }
 
-snd_pcm_sframes_t UNAP::get_delay() const {
+snd_pcm_sframes_t Sender::Impl::get_delay() const {
     if (!m_bPrepared)
-        return get_buffer_size();
+        return m_pPlug->get_buffer_size();
 
     const snd_pcm_sframes_t nEstimated = _estimate_frames();
     const snd_pcm_sframes_t nDelay = std::max<snd_pcm_sframes_t>(0,
-            snd_pcm_sframes_t(this->appl_ptr) - nEstimated);
+            snd_pcm_sframes_t(m_pPlug->appl_ptr) - nEstimated);
 
-    if (nDelay > (snd_pcm_sframes_t)get_buffer_size())
-        this->log.warning("nDelay > get_buffer_size() (%d > %d)",
-                nDelay, get_buffer_size());
+    if (nDelay > (snd_pcm_sframes_t)m_pPlug->get_buffer_size())
+        m_pPlug->log.warning("nDelay > get_buffer_size() (%d > %d)",
+                nDelay, m_pPlug->get_buffer_size());
 
     if (nDelay == 0)
-       this->log.warning("XRUN, nDelay == 0");
+        m_pPlug->log.warning("XRUN, nDelay == 0");
 
     return nDelay;
 }
 
-void UNAP::_reset(bool _bResetStreamParams) {
+void Sender::Impl::_reset(bool _bResetStreamParams) {
     m_nPointer = 0;
     m_nLastFrames = 0;
     m_startTime = TimePoint();
@@ -206,7 +272,7 @@ void UNAP::_reset(bool _bResetStreamParams) {
     }
 }
 
-void UNAP::_init_descriptors() {
+void Sender::Impl::_init_descriptors() {
     int fds[2];
 
     if (socketpair(AF_LOCAL, SOCK_STREAM, 0, fds) != 0)
@@ -225,35 +291,35 @@ void UNAP::_init_descriptors() {
             throw SystemError("fcntl()");
     }
 
-    poll_fd = fds[0];
+    m_pPlug->poll_fd = fds[0];
     m_nSockWorker = fds[1];
-    poll_events = POLLIN;
+    m_pPlug->poll_events = POLLIN;
 }
 
-snd_pcm_sframes_t UNAP::_estimate_frames() const {
-    if ((m_status & usRunning) == 0 || m_status == usPaused)
+snd_pcm_sframes_t Sender::Impl::_estimate_frames() const {
+    if ((m_status & Sender::usRunning) == 0 || m_status == Sender::usPaused)
         return m_nLastFrames;
     Duration ms(std::chrono::duration_cast<Duration>(Clock::now() - m_startTime));
-    return m_nLastFrames + ms.count()*(get_rate()/1000.0);
+    return m_nLastFrames + ms.count()*(m_pPlug->get_rate()/1000.0);
 }
 
-snd_pcm_sframes_t UNAP::_get_frames_required() const {
+snd_pcm_sframes_t Sender::Impl::_get_frames_required() const {
     Duration ms(std::chrono::duration_cast<Duration>(Clock::now() - m_lastFrameTime));
-    return ms.count()*get_rate()/1000;
+    return ms.count()*m_pPlug->get_rate()/1000;
 }
 
-std::function<void(void)> UNAP::_make_worker() {
+std::function<void(void)> Sender::Impl::_make_worker() {
     return [&]() {
         if (!m_nSockWorker)
             return;
 
-        Status prev = usRunning;
-        const int nSendThresholdFrames = (this->nMTU - 100)/get_bytes_per_frame();
+        Status prev = Sender::usRunning;
+        const int nSendThresholdFrames = (m_pPlug->nMTU - 100)/get_bytes_per_frame();
 
-        while (m_status & usRunning) {
-            if (prev == usRunning && m_status == usPaused)
+        while (m_status & Sender::usRunning) {
+            if (prev == Sender::usRunning && m_status == Sender::usPaused)
                 _send_pause();
-            else if (prev == usPaused && m_status == usRunning)
+            else if (prev == Sender::usPaused && m_status == Sender::usRunning)
                 _send_unpause();
 
             {
@@ -261,35 +327,35 @@ std::function<void(void)> UNAP::_make_worker() {
 
                 if (!m_queue.empty()) {
                     while (!m_queue.empty() && (
-                            m_status != UNAP::usRunning ||
+                            m_status != Sender::usRunning ||
                             m_nFramesQueued >= nSendThresholdFrames))
                         _send_data();
-                } else if (m_bPrepared && m_status == UNAP::usStopping && _estimate_frames() >= m_nPointer) {
+                } else if (m_bPrepared && m_status == Sender::usStopping && _estimate_frames() >= m_nPointer) {
                     _send_stop();
-                    m_status = UNAP::usStopped;
+                    m_status = Sender::usStopped;
                 }
             }
 
             // Don't wake up the other party unless there is buffer space available.
-            if (get_delay() < (snd_pcm_sframes_t)get_buffer_size()) {
+            if (get_delay() < (snd_pcm_sframes_t)m_pPlug->get_buffer_size()) {
                 char buf[1] = {0};
                 write(m_nSockWorker, buf, 1);
             }
 
             prev = m_status;
-            std::this_thread::sleep_for(std::chrono::milliseconds(this->nSendPeriod));
+            std::this_thread::sleep_for(std::chrono::milliseconds(m_pPlug->nSendPeriod));
         }
     };
 }
 
-void UNAP::_prepare_packet(unap::Packet &_packet, unap::Packet_Kind _kind,
+void Sender::Impl::_prepare_packet(unap::Packet &_packet, unap::Packet_Kind _kind,
         uint64_t _nTimestamp)
 {
     _packet.set_version(1);
     _packet.set_stream(m_cStreamId);
     _packet.set_kind(_kind);
     _packet.set_channels(m_cChannels);
-    _packet.set_rate(get_rate());
+    _packet.set_rate(m_pPlug->get_rate());
     _packet.set_format(m_strFormat);
     _packet.set_timestamp(_nTimestamp);
 
@@ -297,7 +363,7 @@ void UNAP::_prepare_packet(unap::Packet &_packet, unap::Packet_Kind _kind,
         _packet.set_samples("");
 }
 
-void UNAP::_send_buffer(const void *_pBuf, size_t _cSize) {
+void Sender::Impl::_send_buffer(const void *_pBuf, size_t _cSize) {
     for (size_t cRetry = 0; cRetry < 5; ++cRetry) {
         if (send(m_nSocket, _pBuf, _cSize, 0) >= 0)
             break;
@@ -309,32 +375,32 @@ void UNAP::_send_buffer(const void *_pBuf, size_t _cSize) {
     }
 }
 
-void UNAP::_send_packet(const unap::Packet &_packet) {
-    auto pBuf = std::unique_ptr<char[]>(new char[this->nMTU]);
-    assert(_packet.ByteSize() <= this->nMTU);
-    _packet.SerializeToArray((void *)pBuf.get(), this->nMTU);
+void Sender::Impl::_send_packet(const unap::Packet &_packet) {
+    auto pBuf = std::unique_ptr<char[]>(new char[m_pPlug->nMTU]);
+    assert(_packet.ByteSize() <= m_pPlug->nMTU);
+    _packet.SerializeToArray((void *)pBuf.get(), m_pPlug->nMTU);
     _send_buffer((const void *)pBuf.get(), _packet.ByteSize());
 }
 
-void UNAP::_send_stop() {
+void Sender::Impl::_send_stop() {
     unap::Packet packet;
     _prepare_packet(packet, unap::Packet_Kind_STOP, _estimate_frames());
     _send_packet(packet);
 }
 
-void UNAP::_send_pause() {
+void Sender::Impl::_send_pause() {
     unap::Packet packet;
     _prepare_packet(packet, unap::Packet_Kind_PAUSE, _estimate_frames());
     _send_packet(packet);
 }
 
-void UNAP::_send_unpause() {
+void Sender::Impl::_send_unpause() {
     unap::Packet packet;
     _prepare_packet(packet, unap::Packet_Kind_UNPAUSE, m_nLastFrames);
     _send_packet(packet);
 }
 
-void UNAP::_send_data() {
+void Sender::Impl::_send_data() {
     unap::Packet packet;
 
     assert(m_bPrepared);
@@ -342,9 +408,9 @@ void UNAP::_send_data() {
 
     const size_t cHeaderSize = packet.ByteSize() + 4; // Account for data length field.
     const size_t cFrameSize = get_bytes_per_frame();
-    const size_t cTotal = ((this->nMTU - cHeaderSize)/cFrameSize)*cFrameSize;
+    const size_t cTotal = ((m_pPlug->nMTU - cHeaderSize)/cFrameSize)*cFrameSize;
     size_t cBytes = cTotal;
-    auto pBuf = std::unique_ptr<char[]>(new char[this->nMTU]); // Reuse as serialization buffer.
+    auto pBuf = std::unique_ptr<char[]>(new char[m_pPlug->nMTU]); // Reuse as serialization buffer.
     char *pPos = pBuf.get();
     size_t cOffset = 0;
 
@@ -379,12 +445,12 @@ void UNAP::_send_data() {
     m_nFramesQueued -= (cTotal - cBytes)/get_bytes_per_frame();
 
     // Send.
-    assert(packet.ByteSize() <= this->nMTU);
-    packet.SerializeToArray((void *)pBuf.get(), this->nMTU);
+    assert(packet.ByteSize() <= m_pPlug->nMTU);
+    packet.SerializeToArray((void *)pBuf.get(), m_pPlug->nMTU);
     _send_buffer((const void *)pBuf.get(), packet.ByteSize());
 }
 
-void UNAP::connect() {
+void Sender::Impl::connect() {
     struct sockaddr_in name;
 
     if (m_nSocket >= 0)
@@ -396,9 +462,9 @@ void UNAP::connect() {
         throw SystemError("socket()");
 
     name.sin_family = AF_INET;
-    name.sin_port = htons(this->nPort);
+    name.sin_port = htons(m_pPlug->nPort);
 
-    struct hostent *pHost = gethostbyname(this->strHost.c_str());
+    struct hostent *pHost = gethostbyname(m_pPlug->strHost.c_str());
 
     if (!pHost)
         throw SystemError("gethostbyname()");
@@ -409,10 +475,10 @@ void UNAP::connect() {
         throw SystemError("connect()");
 }
 
-const std::vector<unsigned int> &UNAP::get_format_values() {
+const std::vector<unsigned int> &Sender::Impl::get_format_values() {
     m_formatValues.clear();
 
-    for (const std::string &strFormat : formats) {
+    for (const std::string &strFormat : m_pPlug->formats) {
         auto iFormat = g_formats.find(strFormat);
 
         if (iFormat != g_formats.end())
@@ -422,26 +488,87 @@ const std::vector<unsigned int> &UNAP::get_format_values() {
     return m_formatValues;
 }
 
-unsigned int UNAP::get_channel_count() const {
-    return this->channels;
-}
-
-snd_pcm_uframes_t UNAP::get_buffer_size() const {
-    return this->buffer_size;
-}
-
-snd_pcm_uframes_t UNAP::get_period_size() const {
-    return this->buffer_size;
-}
-
-size_t UNAP::get_bytes_per_frame() const {
+size_t Sender::Impl::get_bytes_per_frame() const {
     return m_cChannels*m_cBitsPerSample/8;
 }
 
-snd_pcm_format_t UNAP::get_format() const {
+Sender::Sender() :
+        strHost("127.0.0.1"), nPort(26751), nMTU(1500), nSendPeriod(10), m_pImpl(new Impl(this))
+{
+}
+
+Sender::~Sender() {
+    delete m_pImpl;
+}
+
+Sender::Status Sender::get_status() const {
+    return m_pImpl->get_status();
+}
+
+void Sender::start() {
+    m_pImpl->start();
+}
+
+void Sender::stop() {
+    m_pImpl->stop();
+}
+
+snd_pcm_sframes_t Sender::get_buffer_pointer() const {
+    return m_pImpl->get_buffer_pointer();
+}
+
+snd_pcm_sframes_t Sender::transfer(const char *_pData, size_t _cOffset, size_t _cSize) {
+    return m_pImpl->transfer(_pData, _cOffset, _cSize);
+}
+
+void Sender::prepare() {
+    m_pImpl->prepare();
+}
+
+void Sender::drain() {
+    return m_pImpl->drain();
+}
+
+void Sender::pause() {
+    m_pImpl->pause();
+}
+
+void Sender::unpause() {
+    m_pImpl->unpause();
+}
+
+snd_pcm_sframes_t Sender::get_delay() const {
+    return m_pImpl->get_delay();
+}
+
+void Sender::connect() {
+    m_pImpl->connect();
+}
+
+const std::vector<unsigned int> &Sender::get_format_values() {
+    return m_pImpl->get_format_values();
+}
+
+size_t Sender::get_bytes_per_frame() const {
+    return m_pImpl->get_bytes_per_frame();
+}
+
+unsigned int Sender::get_channel_count() const {
+    return this->channels;
+}
+
+snd_pcm_uframes_t Sender::get_buffer_size() const {
+    return this->buffer_size;
+}
+
+snd_pcm_uframes_t Sender::get_period_size() const {
+    return this->buffer_size;
+}
+
+snd_pcm_format_t Sender::get_format() const {
     return this->format;
 }
 
-unsigned int UNAP::get_rate() const {
+unsigned int Sender::get_rate() const {
     return this->rate;
 }

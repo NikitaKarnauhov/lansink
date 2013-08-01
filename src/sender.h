@@ -32,14 +32,8 @@
 #ifndef SENDER_H_
 #define SENDER_H_
 
-#include <functional>
 #include <string>
 #include <vector>
-#include <thread>
-#include <chrono>
-#include <list>
-#include <mutex>
-#include <random>
 
 #include <alsa/input.h>
 #include <alsa/output.h>
@@ -53,7 +47,7 @@
 #include "log.h"
 #include "unap.pb.h"
 
-class UNAP : public snd_pcm_ioplug_t {
+class Sender : public snd_pcm_ioplug_t {
 public:
     std::string strHost;
     long nPort;
@@ -72,8 +66,8 @@ public:
         usPaused = 0x04 | usRunning
     };
 
-    UNAP();
-    ~UNAP();
+    Sender();
+    ~Sender();
 
     Status get_status() const;
     void start();
@@ -95,43 +89,8 @@ public:
     unsigned int get_rate() const;
 
 private:
-    typedef std::chrono::high_resolution_clock Clock;
-    typedef std::chrono::duration<int, std::milli> Duration;
-    typedef std::chrono::time_point<Clock> TimePoint;
-
-    std::vector<unsigned int> m_formatValues;
-    std::string m_strFormat;
-    size_t m_cBitsPerSample;
-    size_t m_cChannels;
-    std::thread m_worker;
-    mutable std::mutex m_mutex;
-    int m_nSockWorker;
-    TimePoint m_startTime;
-    TimePoint m_lastFrameTime;
-    snd_pcm_sframes_t m_nLastFrames;
-    snd_pcm_sframes_t m_nFramesQueued;
-    snd_pcm_sframes_t m_nPointer;
-    std::list<std::string> m_queue;
-    std::unique_ptr<char[]> m_pBuffer;
-    Status m_status;
-    bool m_bPrepared;
-    int m_nSocket;
-    static unsigned int s_cSeed;
-    static std::default_random_engine s_randomEngine;
-    uint64_t m_cStreamId;
-
-    void _reset(bool _bResetStreamParams);
-    std::function<void(void)> _make_worker();
-    void _init_descriptors();
-    snd_pcm_sframes_t _estimate_frames() const;
-    snd_pcm_sframes_t _get_frames_required() const;
-    void _prepare_packet(unap::Packet &_packet, unap::Packet_Kind _kind, uint64_t _nTimestamp);
-    void _send_buffer(const void *_pBuf, size_t _cSize);
-    void _send_packet(const unap::Packet &_packet);
-    void _send_data();
-    void _send_pause();
-    void _send_unpause();
-    void _send_stop();
+    class Impl;
+    Impl *m_pImpl;
 };
 
 #endif /* SENDER_H_ */

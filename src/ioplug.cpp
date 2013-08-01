@@ -55,7 +55,7 @@ namespace callbacks {
 extern "C" {
 
 int unap_start(snd_pcm_ioplug_t *_pPlug) {
-    UNAP *pPlug = (UNAP *)_pPlug->private_data;
+    Sender *pPlug = (Sender *)_pPlug->private_data;
 
     try {
         pPlug->start();
@@ -68,7 +68,7 @@ int unap_start(snd_pcm_ioplug_t *_pPlug) {
 }
 
 int unap_stop(snd_pcm_ioplug_t *_pPlug) {
-    UNAP *pPlug = (UNAP *)_pPlug->private_data;
+    Sender *pPlug = (Sender *)_pPlug->private_data;
 
     try {
         pPlug->stop();
@@ -81,7 +81,7 @@ int unap_stop(snd_pcm_ioplug_t *_pPlug) {
 }
 
 snd_pcm_sframes_t unap_pointer(snd_pcm_ioplug_t *_pPlug) {
-    UNAP *pPlug = (UNAP *)_pPlug->private_data;
+    Sender *pPlug = (Sender *)_pPlug->private_data;
     snd_pcm_sframes_t nResult = 0;
 
     try {
@@ -97,7 +97,7 @@ snd_pcm_sframes_t unap_pointer(snd_pcm_ioplug_t *_pPlug) {
 snd_pcm_sframes_t unap_transfer(snd_pcm_ioplug_t *_pPlug, const snd_pcm_channel_area_t *_pAreas,
         snd_pcm_uframes_t _cOffset, snd_pcm_uframes_t _cSize)
 {
-    UNAP *pPlug = (UNAP *)_pPlug->private_data;
+    Sender *pPlug = (Sender *)_pPlug->private_data;
     size_t cFrames = 0;
 
     try {
@@ -119,7 +119,7 @@ snd_pcm_sframes_t unap_transfer(snd_pcm_ioplug_t *_pPlug, const snd_pcm_channel_
 }
 
 int unap_close(snd_pcm_ioplug_t *_pPlug) {
-    UNAP *pPlug = (UNAP *)_pPlug->private_data;
+    Sender *pPlug = (Sender *)_pPlug->private_data;
 
     try {
         pPlug->stop();
@@ -134,7 +134,7 @@ int unap_close(snd_pcm_ioplug_t *_pPlug) {
 }
 
 int unap_prepare(snd_pcm_ioplug_t *_pPlug) {
-    UNAP *pPlug = (UNAP *)_pPlug->private_data;
+    Sender *pPlug = (Sender *)_pPlug->private_data;
 
     try {
         pPlug->prepare();
@@ -147,7 +147,7 @@ int unap_prepare(snd_pcm_ioplug_t *_pPlug) {
 }
 
 int unap_drain(snd_pcm_ioplug_t *_pPlug) {
-    UNAP *pPlug = (UNAP *)_pPlug->private_data;
+    Sender *pPlug = (Sender *)_pPlug->private_data;
 
     try {
         pPlug->drain();
@@ -160,7 +160,7 @@ int unap_drain(snd_pcm_ioplug_t *_pPlug) {
 }
 
 int unap_pause(snd_pcm_ioplug_t *_pPlug, int _bEnable) {
-    UNAP *pPlug = (UNAP *)_pPlug->private_data;
+    Sender *pPlug = (Sender *)_pPlug->private_data;
 
     try {
         if (_bEnable)
@@ -179,7 +179,7 @@ int unap_pause(snd_pcm_ioplug_t *_pPlug, int _bEnable) {
 int unap_poll_revents(snd_pcm_ioplug_t *_pPlug, struct pollfd *_pFD, unsigned int _cFDs,
         unsigned short *_pREvents)
 {
-    UNAP *pPlug = (UNAP *)_pPlug->private_data;
+    Sender *pPlug = (Sender *)_pPlug->private_data;
 
     try {
         static char buf[1];
@@ -204,7 +204,7 @@ int unap_poll_revents(snd_pcm_ioplug_t *_pPlug, struct pollfd *_pFD, unsigned in
 }
 
 int unap_delay(snd_pcm_ioplug_t *_pPlug, snd_pcm_sframes_t *_pnDelay) {
-    UNAP *pPlug = (UNAP *)_pPlug->private_data;
+    Sender *pPlug = (Sender *)_pPlug->private_data;
 
     try {
         *_pnDelay = pPlug->get_delay();
@@ -251,7 +251,7 @@ snd_pcm_ioplug_callback_t &get() {
 static const size_t g_cPeriods = 8;
 
 static
-void _set_hw_constraint(struct UNAP *_pPlug)
+void _set_hw_constraint(struct Sender *_pPlug)
 {
     std::array<unsigned int, 4> accesses{
         SND_PCM_ACCESS_MMAP_INTERLEAVED,
@@ -275,7 +275,7 @@ void _set_hw_constraint(struct UNAP *_pPlug)
 extern "C"
 SND_PCM_PLUGIN_DEFINE_FUNC(unap) {
     snd_config_iterator_t i, next;
-    UNAP *pPlug = new(calloc(1, sizeof(UNAP))) UNAP;
+    Sender *pPlug = new(calloc(1, sizeof(Sender))) Sender;
 
     snd_config_t *pRates = nullptr;
     snd_config_t *pChannels = nullptr;
