@@ -310,40 +310,44 @@ snd_pcm_sframes_t Sender::Impl::_get_frames_required() const {
 
 std::function<void(void)> Sender::Impl::_make_worker() {
     return [&]() {
-        if (!m_nSockWorker)
-            return;
+        try {
+            if (!m_nSockWorker)
+                return;
 
-        Status prev = Sender::usRunning;
-        const int nSendThresholdFrames = (m_pPlug->nMTU - 100)/get_bytes_per_frame();
+            Status prev = Sender::usRunning;
+            const int nSendThresholdFrames = (m_pPlug->nMTU - 100)/get_bytes_per_frame();
 
-        while (m_status & Sender::usRunning) {
-            if (prev == Sender::usRunning && m_status == Sender::usPaused)
-                _send_pause();
-            else if (prev == Sender::usPaused && m_status == Sender::usRunning)
-                _send_unpause();
+            while (m_status & Sender::usRunning) {
+                if (prev == Sender::usRunning && m_status == Sender::usPaused)
+                    _send_pause();
+                else if (prev == Sender::usPaused && m_status == Sender::usRunning)
+                    _send_unpause();
 
-            {
-                std::lock_guard<std::mutex> lock(m_mutex);
+                {
+                    std::lock_guard<std::mutex> lock(m_mutex);
 
-                if (!m_queue.empty()) {
-                    while (!m_queue.empty() && (
-                            m_status != Sender::usRunning ||
-                            m_nFramesQueued >= nSendThresholdFrames))
-                        _send_data();
-                } else if (m_bPrepared && m_status == Sender::usStopping && _estimate_frames() >= m_nPointer) {
-                    _send_stop();
-                    m_status = Sender::usStopped;
+                    if (!m_queue.empty()) {
+                        while (!m_queue.empty() && (
+                                m_status != Sender::usRunning ||
+                                m_nFramesQueued >= nSendThresholdFrames))
+                            _send_data();
+                    } else if (m_bPrepared && m_status == Sender::usStopping && _estimate_frames() >= m_nPointer) {
+                        _send_stop();
+                        m_status = Sender::usStopped;
+                    }
                 }
-            }
 
-            // Don't wake up the other party unless there is buffer space available.
-            if (get_delay() < (snd_pcm_sframes_t)m_pPlug->get_buffer_size()) {
-                char buf[1] = {0};
-                write(m_nSockWorker, buf, 1);
-            }
+                // Don't wake up the other party unless there is buffer space available.
+                if (get_delay() < (snd_pcm_sframes_t)m_pPlug->get_buffer_size()) {
+                    char buf[1] = {0};
+                    write(m_nSockWorker, buf, 1);
+                }
 
-            prev = m_status;
-            std::this_thread::sleep_for(std::chrono::milliseconds(m_pPlug->nSendPeriod));
+                prev = m_status;
+                std::this_thread::sleep_for(std::chrono::milliseconds(m_pPlug->nSendPeriod));
+            }
+        } catch (std::exception &e) {
+            m_pPlug->log.error(e.what());
         }
     };
 }
