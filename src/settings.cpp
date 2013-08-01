@@ -66,7 +66,8 @@ struct SettingsParser::Impl {
         {L"log-level", &settings.nLogLevel},
         {L"port", &settings.nPort},
         {L"recovery-timeout", &settings.nRecoveryTimeout},
-        {L"open-timeout", &settings.nOpenTimeout}
+        {L"open-timeout", &settings.nOpenTimeout},
+        {L"buffered-packets", &settings.nBufferedPackets}
     };
 
     std::map<std::wstring, std::string *, LessIC> stringSettings{

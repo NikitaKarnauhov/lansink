@@ -24,3 +24,6 @@ recovery-timeout 120
 
 # Milliseconds to wait between attempts to open device.
 open-timeout 2000
+
+# Number of packets preserved if failed to open device.
+buffered-packets 10

@@ -85,6 +85,7 @@ void _print_usage(std::ostream &_os) {
             "  -D, --alsa-device       Output ALSA device.\n" <<
             "      --recovery-timeout  Seconds to wait after for stream data to reappear.\n" <<
             "      --open-timeout      Milliseconds to wait between attempts to open device.\n" <<
+            "      --buffered-packets  Number of packets preserved if failed to open device.\n" <<
             "" << std::flush;
 }
 
@@ -250,6 +251,9 @@ void _main(Log &_log) {
                     continue;
                 }
 
+                if (packets.size() > (size_t)g_settings.nBufferedPackets)
+                    packets.pop_front();
+
                 if (m_lastOpenAttempt.time_since_epoch().count() > 0) {
                     // Last attempt at open() failed, check if timeout expired.
                     Duration ms(std::chrono::duration_cast<Duration>(Clock::now() - m_lastOpenAttempt));
@@ -272,7 +276,10 @@ void _main(Log &_log) {
                     }
                 }
 
-                pPlayer->play(packet);
+                for (unap::Packet &packet : packets)
+                    pPlayer->play(packet);
+
+                packets.clear();
             }
         } catch (SystemError &se) {
             if (se.get_error() != EINTR)

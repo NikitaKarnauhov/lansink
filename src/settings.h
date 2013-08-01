@@ -53,6 +53,7 @@ struct Settings {
     int nPort = 26751;
     int nRecoveryTimeout = 120;
     int nOpenTimeout = 2000;
+    int nBufferedPackets = 10;
     bool bDaemon = false;
 };
 
