@@ -84,6 +84,7 @@ void _print_usage(std::ostream &_os) {
             "  -P, --port              Server port.\n" <<
             "  -D, --alsa-device       Output ALSA device.\n" <<
             "      --recovery-timeout  Seconds to wait after for stream data to reappear.\n" <<
+            "      --open-timeout      Milliseconds to wait between attempts to open device.\n" <<
             "" << std::flush;
 }
 
@@ -110,6 +111,7 @@ void _parse_options(int _nArgs, char *const _pArgs[]) {
             {"port", required_argument, 0, 'P'},
             {"alsa-device", required_argument, 0, 'D'},
             {"recovery-timeout", required_argument, 0, 500},
+            {"open-timeout", required_argument, 0, 501},
             {0, 0, 0, 0}
     };
 
@@ -222,6 +224,11 @@ void _main(Log &_log) {
     auto pBuf = std::unique_ptr<char[]>(new char[cBufferSize]);
     std::list<unap::Packet> packets;
 
+    typedef std::chrono::steady_clock Clock;
+    typedef std::chrono::duration<int, std::milli> Duration;
+    typedef std::chrono::time_point<Clock> TimePoint;
+    TimePoint m_lastOpenAttempt;
+
     do {
         try {
             if (poll(&fd, 1, 1000) < 0)
@@ -243,21 +250,29 @@ void _main(Log &_log) {
                     continue;
                 }
 
+                if (m_lastOpenAttempt.time_since_epoch().count() > 0) {
+                    // Last attempt at open() failed, check if timeout expired.
+                    Duration ms(std::chrono::duration_cast<Duration>(Clock::now() - m_lastOpenAttempt));
+                    if (ms.count() < g_settings.nOpenTimeout)
+                        continue;
+                }
+
                 Player *pPlayer = Player::get(packet, _log);
 
                 if (!pPlayer->is_prepared()) {
-                    // FIXME handle 'device or resource busy'.
                     _log.info("New connection from %s", _in_addr_to_string(&sender).c_str());
                     pPlayer->init(packet);
 
-                    if (pPlayer->is_prepared())
+                    if (pPlayer->is_prepared()) {
+                        m_lastOpenAttempt = TimePoint();
                         pPlayer->run();
-                    else
-                        pPlayer = nullptr;
+                    } else {
+                        m_lastOpenAttempt = Clock::now();
+                        continue;
+                    }
                 }
 
-                if (pPlayer)
-                    pPlayer->play(packet);
+                pPlayer->play(packet);
             }
         } catch (SystemError &se) {
             if (se.get_error() != EINTR)

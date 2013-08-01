@@ -21,3 +21,6 @@ alsa-device "pulse"
 
 # Seconds to wait after for stream data to reappear.
 recovery-timeout 120
+
+# Milliseconds to wait between attempts to open device.
+open-timeout 2000

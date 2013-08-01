@@ -52,6 +52,7 @@ struct Settings {
     int nLogLevel = 0;
     int nPort = 26751;
     int nRecoveryTimeout = 120;
+    int nOpenTimeout = 2000;
     bool bDaemon = false;
 };
 
