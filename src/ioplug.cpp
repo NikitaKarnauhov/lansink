@@ -387,8 +387,9 @@ SND_PCM_PLUGIN_DEFINE_FUNC(unap) {
                 if (snd_config_get_id(pEntry, &strField) < 0)
                     continue;
 
-                pPlug->channelValues.emplace_back();
-                snd_config_get_integer(pEntry, (long int *)&pPlug->channelValues.back());
+                long nChannels = 0;
+                snd_config_get_integer(pEntry, &nChannels);
+                pPlug->channelValues.push_back(nChannels);
             }
         } else
             pPlug->channelValues = {1, 2};
@@ -404,8 +405,9 @@ SND_PCM_PLUGIN_DEFINE_FUNC(unap) {
                 if (snd_config_get_id(pRates, &strField) < 0)
                     continue;
 
-                pPlug->rateValues.emplace_back();
-                snd_config_get_integer(pEntry, (long int *)&pPlug->rateValues.back());
+                long nRate = 0;
+                snd_config_get_integer(pEntry, &nRate);
+                pPlug->rateValues.push_back(nRate);
             }
         } else
             pPlug->rateValues = {44100, 48000};
