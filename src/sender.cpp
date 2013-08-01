@@ -52,7 +52,7 @@ unsigned int UNAP::s_cSeed = 0;
 std::default_random_engine UNAP::s_randomEngine = std::default_random_engine();
 
 UNAP::UNAP() :
-    strHost("127.0.0.1"), nPort(26751), nMTU(1500),
+    strHost("127.0.0.1"), nPort(26751), nMTU(1500), nSendPeriod(10),
     m_strFormat(""), m_cBitsPerSample(0), m_cChannels(0),
     m_nSockWorker(0), m_status(usStopped), m_nSocket(-1),
     m_cStreamId(0)
@@ -277,7 +277,7 @@ std::function<void(void)> UNAP::_make_worker() {
             }
 
             prev = m_status;
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            std::this_thread::sleep_for(std::chrono::milliseconds(this->nSendPeriod));
         }
     };
 }

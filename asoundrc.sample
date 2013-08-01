@@ -17,6 +17,9 @@ pcm.unap {
     # Largest packet size. See ifconfig(8).
     mtu 1500
 
+    # Send queued data period in milliseconds.
+    send_period 10
+
     # Debug log file location.
     log "/tmp/unap_pcm.log"
 

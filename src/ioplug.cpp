@@ -324,6 +324,11 @@ SND_PCM_PLUGIN_DEFINE_FUNC(unap) {
                 continue;
             }
 
+            if (strcmp(strField, "send_period") == 0) {
+                snd_config_get_integer(pEntry, &pPlug->nSendPeriod);
+                continue;
+            }
+
             if (strcmp(strField, "log") == 0) {
                 snd_config_get_string(pEntry, &strValue);
                 pPlug->log.open(strValue);

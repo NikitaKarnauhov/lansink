@@ -58,6 +58,7 @@ public:
     std::string strHost;
     long nPort;
     long nMTU;
+    long nSendPeriod;
 
     std::vector<unsigned int> rateValues, channelValues;
     std::vector<std::string> formats;
