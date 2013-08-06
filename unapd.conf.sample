@@ -27,3 +27,6 @@ open-timeout 2000
 
 # Number of packets preserved if failed to open device.
 buffered-packets 10
+
+# Do not try to open device if it is already in use.
+exclusive false

@@ -138,10 +138,17 @@ private:
 
 Player *Player::Impl::get(unap::Packet &_packet, Log &_log) {
     std::lock_guard<std::mutex> lock(s_playerMapMutex);
+
     auto player = s_players.insert(std::make_pair(_packet.stream(), nullptr));
 
-    if (player.second)
+    if (player.second) {
+        if (g_settings.bExclusive && s_players.size() > 1) {
+            s_players.erase(player.first);
+            return nullptr;
+        }
+
         player.first->second = new Player(_packet.stream(), _log);
+    }
 
     return player.first->second;
 }
@@ -280,6 +287,7 @@ void Player::Impl::run() {
                     if (m_queue.empty()) {
                         m_pLog->info("Dropping stream %llu", m_cStreamId);
                         ALSA::close(m_pPcm);
+                        m_pPcm = nullptr;
                         break;
                     }
 

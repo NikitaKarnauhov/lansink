@@ -59,7 +59,8 @@ struct SettingsParser::Impl {
     Settings settings;
 
     std::map<std::wstring, bool *, LessIC> boolSettings{
-        {L"daemon", &settings.bDaemon}
+        {L"daemon", &settings.bDaemon},
+        {L"exclusive", &settings.bExclusive}
     };
 
     std::map<std::wstring, int *, LessIC> intSettings{

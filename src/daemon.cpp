@@ -83,6 +83,8 @@ void _print_usage(std::ostream &_os) {
             "  -H, --host              Server host.\n" <<
             "  -P, --port              Server port.\n" <<
             "  -D, --alsa-device       Output ALSA device.\n" <<
+            "  -x, --exclusive         Do not try to open device if it is already in use.\n" <<
+            "      --no-exclusive      Try to open device for new connection every time.\n" <<
             "      --recovery-timeout  Seconds to wait after for stream data to reappear.\n" <<
             "      --open-timeout      Milliseconds to wait between attempts to open device.\n" <<
             "      --buffered-packets  Number of packets preserved if failed to open device.\n" <<
@@ -113,10 +115,12 @@ void _parse_options(int _nArgs, char *const _pArgs[]) {
             {"alsa-device", required_argument, 0, 'D'},
             {"recovery-timeout", required_argument, 0, 500},
             {"open-timeout", required_argument, 0, 501},
+            {"exclusive", 0, 0, 'x'},
+            {"no-exclusive", 0, 0, 502},
             {0, 0, 0, 0}
     };
 
-    const char *strOptions = "hvc:l:L:dnp:H:P:D:";
+    const char *strOptions = "hvc:l:L:dnp:H:P:D:x";
     int nOption = 0;
     SettingsParser sp;
     std::map<std::string, std::string> kvs;
@@ -155,6 +159,14 @@ void _parse_options(int _nArgs, char *const _pArgs[]) {
 
             case 'n':
                 kvs["daemon"] = "false";
+                break;
+
+            case 'x':
+                kvs["exclusive"] = "true";
+                break;
+
+            case 502:
+                kvs["exclusive"] = "false";
                 break;
 
             case '?':
@@ -262,6 +274,12 @@ void _main(Log &_log) {
                 }
 
                 Player *pPlayer = Player::get(packet, _log);
+
+                if (!pPlayer) {
+                    _log.info("Dropping connection from %s: device is busy", _in_addr_to_string(&sender).c_str());
+                    m_lastOpenAttempt = Clock::now();
+                    continue;
+                }
 
                 if (!pPlayer->is_prepared()) {
                     _log.info("New connection from %s", _in_addr_to_string(&sender).c_str());

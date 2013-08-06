@@ -55,6 +55,7 @@ struct Settings {
     int nOpenTimeout = 2000;
     int nBufferedPackets = 10;
     bool bDaemon = false;
+    bool bExclusive = false;
 };
 
 extern Settings g_settings;
