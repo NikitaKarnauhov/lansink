@@ -70,24 +70,26 @@ static int g_nExitSignal = 0;
 
 static
 void _print_usage(std::ostream &_os) {
+    static const Settings c_defaults;
+
     _os << "UNAPd, network audio receiver.\n" <<
             "Usage: unapd [OPTION]...\n\n" <<
-            "  -h, --help              Print this message and exit.\n" <<
-            "  -v, --version           Display the version and exit.\n" <<
-            "  -c, --config-path       Set configuration file location.\n" <<
-            "  -l, --log-path          Set log file location.\n" <<
-            "  -L, --log-level         Set log verbosity level (0 to 4, use 0 to disable logging).\n" <<
-            "  -d, --daemon            Run as a daemon.\n" <<
-            "  -n, --no-daemon         Don't run as a daemon, display log messages (default).\n" <<
-            "  -p, --pid-path          PID file location.\n" <<
-            "  -H, --host              Server host.\n" <<
-            "  -P, --port              Server port.\n" <<
-            "  -D, --alsa-device       Output ALSA device.\n" <<
-            "  -x, --exclusive         Do not try to open device if it is already in use.\n" <<
-            "      --no-exclusive      Try to open device for new connection every time.\n" <<
-            "      --recovery-timeout  Seconds to wait after for stream data to reappear.\n" <<
-            "      --open-timeout      Milliseconds to wait between attempts to open device.\n" <<
-            "      --buffered-packets  Number of packets preserved if failed to open device.\n" <<
+            "  -h, --help                       Print this message and exit.\n" <<
+            "  -v, --version                    Display the version and exit.\n" <<
+            "  -c, --config-path PATH           Set configuration file location.\n" <<
+            "  -l, --log-path PATH              Set log file location (default: " << c_defaults.strLogPath << ").\n" <<
+            "  -L, --log-level NUMBER           Set log verbosity level (default: " << c_defaults.nLogLevel << ", maximum: 4).\n" <<
+            "  -d, --daemon                     Run as a daemon.\n" <<
+            "  -n, --no-daemon                  Don't run as a daemon, display log messages (default).\n" <<
+            "  -p, --pid-path PATH              PID file location (default: " << c_defaults.strPIDPath << ").\n" <<
+            "  -H, --host NAME                  Server host.\n" <<
+            "  -P, --port NUMBER                Server port (default: " << c_defaults.nPort << ").\n" <<
+            "  -D, --alsa-device NAME           Output ALSA device.\n" <<
+            "  -x, --exclusive                  Do not try to open device if it is already in use.\n" <<
+            "      --no-exclusive               Try to open device for every new connection (default).\n" <<
+            "      --recovery-timeout SECONDS   Seconds to wait after for stream data to reappear (default: " << c_defaults.nRecoveryTimeout << ").\n" <<
+            "      --open-timeout MILLISECONDS  Milliseconds to wait between attempts to open device (default: " << c_defaults.nOpenTimeout << ").\n" <<
+            "      --buffered-packets NUMBER    Number of packets preserved if failed to open device (default: " << c_defaults.nBufferedPackets << ").\n" <<
             "" << std::flush;
 }
 
