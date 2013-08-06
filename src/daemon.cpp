@@ -276,10 +276,12 @@ void _main(Log &_log) {
                     }
                 }
 
-                for (unap::Packet &packet : packets)
-                    pPlayer->play(packet);
-
-                packets.clear();
+                for (auto iPacket = packets.begin(); iPacket != packets.end();)
+                    if (iPacket->stream() == pPlayer->get_id()) {
+                        pPlayer->play(*iPacket);
+                        iPacket = packets.erase(iPacket);
+                    } else
+                        ++iPacket;
             }
         } catch (SystemError &se) {
             if (se.get_error() != EINTR)
