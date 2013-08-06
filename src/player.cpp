@@ -272,8 +272,10 @@ void Player::Impl::run() {
                     m_pLog->info("Waiting for recovery (timeout %d seconds)",
                             g_settings.nRecoveryTimeout);
 
-                    m_dataAvailable.wait_for(lock, std::chrono::seconds(g_settings.nRecoveryTimeout),
-                            [&]() { return !m_queue.empty(); });
+                    if (m_queue.empty())
+                        m_dataAvailable.wait_for(lock,
+                                std::chrono::seconds(g_settings.nRecoveryTimeout),
+                                [&]() { return !m_queue.empty(); });
 
                     if (m_queue.empty()) {
                         m_pLog->info("Dropping stream %llu", m_cStreamId);
@@ -332,9 +334,9 @@ void Player::Impl::run() {
                     if (e.get_error() == -EPIPE) {
                         Duration ms(std::chrono::duration_cast<Duration>(Clock::now() - m_lastWrite));
                         m_pLog->warning("XRUN: %d ms since last write", ms.count());
-                        ALSA::prepare(m_pPcm);
-                    } else
-                        nLastError = e.get_error();
+                    }
+
+                    nLastError = e.get_error();
                 }
             }
         } catch (std::exception &e) {
