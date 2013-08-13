@@ -45,12 +45,12 @@
 #include "settings.h"
 
 struct Samples {
-    unap::Packet_Kind kind;
+    lansink::Packet_Kind kind;
     uint64_t cTimestamp;
     std::string data;
     size_t cOffset;
 
-    Samples(unap::Packet &_packet) :
+    Samples(lansink::Packet &_packet) :
         kind(_packet.kind()), cTimestamp(_packet.timestamp()),
         data(std::move(*_packet.mutable_samples())), cOffset(0)
     {
@@ -91,7 +91,7 @@ public:
         m_pPcm = nullptr;
     }
 
-    static Player *get(unap::Packet &_packet, Log &_log);
+    static Player *get(lansink::Packet &_packet, Log &_log);
     static void remove(uint64_t _cId);
     static void remove_stopped();
 
@@ -99,9 +99,9 @@ public:
         return m_pPcm != nullptr;
     }
 
-    void init(unap::Packet &_packet);
+    void init(lansink::Packet &_packet);
     void run();
-    void play(unap::Packet &_packet);
+    void play(lansink::Packet &_packet);
     uint64_t get_id() const { return m_cStreamId; }
 
 private:
@@ -136,7 +136,7 @@ private:
     void _add_samples(size_t _cSamples, bool _bStopWhenEmpty);
 };
 
-Player *Player::Impl::get(unap::Packet &_packet, Log &_log) {
+Player *Player::Impl::get(lansink::Packet &_packet, Log &_log) {
     std::lock_guard<std::mutex> lock(s_playerMapMutex);
 
     auto player = s_players.insert(std::make_pair(_packet.stream(), nullptr));
@@ -177,7 +177,7 @@ void Player::Impl::remove_stopped() {
             ++iPlayer;
 }
 
-void Player::Impl::init(unap::Packet &_packet) {
+void Player::Impl::init(lansink::Packet &_packet) {
     try {
         snd_pcm_hw_params_t *pParams;
 
@@ -223,7 +223,7 @@ void Player::Impl::init(unap::Packet &_packet) {
     }
 }
 
-void Player::Impl::play(unap::Packet &_packet) {
+void Player::Impl::play(lansink::Packet &_packet) {
     std::lock_guard<std::mutex> lock(m_mutex);
 
     if (m_bClosed)
@@ -233,7 +233,7 @@ void Player::Impl::play(unap::Packet &_packet) {
             _packet.version(), _packet.stream(), _packet.kind(), _packet.format().c_str(),
             _packet.channels(), _packet.rate(), _packet.timestamp(), _packet.samples().size());
 
-    if (_packet.kind() != unap::Packet_Kind_DATA && m_cPosition != 0)
+    if (_packet.kind() != lansink::Packet_Kind_DATA && m_cPosition != 0)
         _packet.set_timestamp(m_cPosition);
 
     if (m_cPosition <= _packet.timestamp()) {
@@ -362,19 +362,19 @@ void Player::Impl::_add_samples(size_t _cSamples, bool _bStopWhenEmpty) {
     for (auto iSamples = m_queue.begin(); iSamples != m_queue.end();) {
         Samples *pSamples = *iSamples;
 
-        if (pSamples->kind == unap::Packet_Kind_DATA) {
+        if (pSamples->kind == lansink::Packet_Kind_DATA) {
             ++iSamples;
             continue;
         }
 
         switch (pSamples->kind) {
-            case unap::Packet_Kind_PAUSE:
+            case lansink::Packet_Kind_PAUSE:
                 m_bPaused = true;
                 break;
-            case unap::Packet_Kind_UNPAUSE:
+            case lansink::Packet_Kind_UNPAUSE:
                 m_bPaused = false;
                 break;
-            case unap::Packet_Kind_STOP:
+            case lansink::Packet_Kind_STOP:
                 m_bClosed = true;
                 return;
             default:
@@ -388,6 +388,7 @@ void Player::Impl::_add_samples(size_t _cSamples, bool _bStopWhenEmpty) {
     if (m_bPaused)
         return;
 
+    // TODO update m_cPosition while waiting after XRUN.
     while (m_cPosition < cEnd) {
         Samples *pSamples = m_queue.empty() ? nullptr : *m_queue.begin();
         size_t cNext = cEnd;
@@ -468,7 +469,7 @@ Player::~Player() {
     delete m_pImpl;
 }
 
-Player *Player::get(unap::Packet &_packet, Log &_log) {
+Player *Player::get(lansink::Packet &_packet, Log &_log) {
     Player::remove_stopped();
     return Impl::get(_packet, _log);
 }
@@ -485,7 +486,7 @@ bool Player::is_prepared() const {
     return m_pImpl->is_prepared();
 }
 
-void Player::init(unap::Packet &_packet) {
+void Player::init(lansink::Packet &_packet) {
     m_pImpl->init(_packet);
 }
 
@@ -493,7 +494,7 @@ void Player::run() {
     m_pImpl->run();
 }
 
-void Player::play(unap::Packet &_packet) {
+void Player::play(lansink::Packet &_packet) {
     m_pImpl->play(_packet);
 }
 

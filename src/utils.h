@@ -29,11 +29,11 @@
     POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef UTILS_H_
-#define UTILS_H_
+#ifndef LANSINK_UTILS_H_
+#define LANSINK_UTILS_H_
 
 #include <string>
 
 std::string format(size_t _cMaxLength, const char *_strFormat, ...);
 
-#endif /* UTILS_H_ */
+#endif /* LANSINK_UTILS_H_ */

@@ -106,9 +106,9 @@ private:
     void _init_descriptors();
     snd_pcm_sframes_t _estimate_frames() const;
     snd_pcm_sframes_t _get_frames_required() const;
-    void _prepare_packet(unap::Packet &_packet, unap::Packet_Kind _kind, uint64_t _nTimestamp);
+    void _prepare_packet(lansink::Packet &_packet, lansink::Packet_Kind _kind, uint64_t _nTimestamp);
     void _send_buffer(const void *_pBuf, size_t _cSize);
-    void _send_packet(const unap::Packet &_packet);
+    void _send_packet(const lansink::Packet &_packet);
     void _send_data();
     void _send_pause();
     void _send_unpause();
@@ -352,7 +352,7 @@ std::function<void(void)> Sender::Impl::_make_worker() {
     };
 }
 
-void Sender::Impl::_prepare_packet(unap::Packet &_packet, unap::Packet_Kind _kind,
+void Sender::Impl::_prepare_packet(lansink::Packet &_packet, lansink::Packet_Kind _kind,
         uint64_t _nTimestamp)
 {
     _packet.set_version(1);
@@ -363,7 +363,7 @@ void Sender::Impl::_prepare_packet(unap::Packet &_packet, unap::Packet_Kind _kin
     _packet.set_format(m_strFormat);
     _packet.set_timestamp(_nTimestamp);
 
-    if (_kind != unap::Packet_Kind_DATA)
+    if (_kind != lansink::Packet_Kind_DATA)
         _packet.set_samples("");
 }
 
@@ -379,7 +379,7 @@ void Sender::Impl::_send_buffer(const void *_pBuf, size_t _cSize) {
     }
 }
 
-void Sender::Impl::_send_packet(const unap::Packet &_packet) {
+void Sender::Impl::_send_packet(const lansink::Packet &_packet) {
     auto pBuf = std::unique_ptr<char[]>(new char[m_pPlug->nMTU]);
     assert(_packet.ByteSize() <= m_pPlug->nMTU);
     _packet.SerializeToArray((void *)pBuf.get(), m_pPlug->nMTU);
@@ -387,28 +387,28 @@ void Sender::Impl::_send_packet(const unap::Packet &_packet) {
 }
 
 void Sender::Impl::_send_stop() {
-    unap::Packet packet;
-    _prepare_packet(packet, unap::Packet_Kind_STOP, _estimate_frames());
+    lansink::Packet packet;
+    _prepare_packet(packet, lansink::Packet_Kind_STOP, _estimate_frames());
     _send_packet(packet);
 }
 
 void Sender::Impl::_send_pause() {
-    unap::Packet packet;
-    _prepare_packet(packet, unap::Packet_Kind_PAUSE, _estimate_frames());
+    lansink::Packet packet;
+    _prepare_packet(packet, lansink::Packet_Kind_PAUSE, _estimate_frames());
     _send_packet(packet);
 }
 
 void Sender::Impl::_send_unpause() {
-    unap::Packet packet;
-    _prepare_packet(packet, unap::Packet_Kind_UNPAUSE, m_nLastFrames);
+    lansink::Packet packet;
+    _prepare_packet(packet, lansink::Packet_Kind_UNPAUSE, m_nLastFrames);
     _send_packet(packet);
 }
 
 void Sender::Impl::_send_data() {
-    unap::Packet packet;
+    lansink::Packet packet;
 
     assert(m_bPrepared);
-    _prepare_packet(packet, unap::Packet_Kind_DATA, m_nPointer);
+    _prepare_packet(packet, lansink::Packet_Kind_DATA, m_nPointer);
 
     const size_t cHeaderSize = packet.ByteSize() + 4; // Account for data length field.
     const size_t cFrameSize = get_bytes_per_frame();

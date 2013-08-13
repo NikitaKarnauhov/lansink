@@ -29,8 +29,8 @@
     POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef LEXER_H_
-#define LEXER_H_
+#ifndef LANSINK_LEXER_H_
+#define LANSINK_LEXER_H_
 
 #include <string>
 #include <iostream>
@@ -212,4 +212,4 @@ inline const Token *TokenIterator<_Impl>::operator ->() const {
 
 }
 
-#endif /* LEXER_H_ */
+#endif /* LANSINK_LEXER_H_ */

@@ -1,13 +1,13 @@
 cmake_minimum_required(VERSION 2.8)
 
-set(CLIENT asound_module_pcm_unap)
-set(SERVER unapd)
+set(CLIENT asound_module_pcm_lansink)
+set(SERVER lansinkd)
 
 add_custom_command(
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/unap.pb.cc
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/lansink.pb.cc
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-    DEPENDS unap.proto
-    COMMAND protoc -I${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/unap.proto
+    DEPENDS lansink.proto
+    COMMAND protoc -I${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/lansink.proto
         --cpp_out=${CMAKE_CURRENT_BINARY_DIR}
 )
 
@@ -18,7 +18,7 @@ set(CLIENT_SOURCES
     alsa.cpp
     utils.cpp
     log.cpp
-    ${CMAKE_CURRENT_BINARY_DIR}/unap.pb.cc
+    ${CMAKE_CURRENT_BINARY_DIR}/lansink.pb.cc
 )
 
 add_definitions(
@@ -47,7 +47,7 @@ set(SERVER_SOURCES
     lexer.cpp
     settings.cpp
     utils.cpp
-    ${CMAKE_CURRENT_BINARY_DIR}/unap.pb.cc
+    ${CMAKE_CURRENT_BINARY_DIR}/lansink.pb.cc
 )
 
 add_executable(${SERVER} ${SERVER_SOURCES})

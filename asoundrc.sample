@@ -1,5 +1,5 @@
-pcm.unap {
-    type unap
+pcm.lansink {
+    type lansink
 
     # Receiver address.
     host "127.0.0.1"
@@ -21,7 +21,7 @@ pcm.unap {
     send_period 10
 
     # Debug log file location.
-    log "/tmp/unap_pcm.log"
+    log "/tmp/lansink.log"
 
     # Log level, 0..4. Set to 0 to disable logging.
     log_level 4

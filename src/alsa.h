@@ -29,8 +29,8 @@
     POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef ALSA_H_
-#define ALSA_H_
+#ifndef LANSINK_ALSA_H_
+#define LANSINK_ALSA_H_
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -112,4 +112,4 @@ struct ALSA {
     static unsigned int format_physical_width(snd_pcm_format_t _format);
 };
 
-#endif /* ALSA_H_ */
+#endif /* LANSINK_ALSA_H_ */

@@ -29,24 +29,24 @@
     POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef SETTINGS_H_
-#define SETTINGS_H_
+#ifndef LANSINK_SETTINGS_H_
+#define LANSINK_SETTINGS_H_
 
 #include <string>
 
 #include <stdio.h>
 
 #ifdef P_tmpdir
-#define UNAP_TEMP_PREFIX P_tmpdir
+#define LANSINK_TEMP_PREFIX P_tmpdir
 #else
-#define UNAP_TEMP_PREFIX "/tmp"
+#define LANSINK_TEMP_PREFIX "/tmp"
 #endif
 
-#define UNAP_PROGRAM_NAME "unapd"
+#define LANSINK_PROGRAM_NAME "lansinkd"
 
 struct Settings {
-    std::string strLogPath = UNAP_TEMP_PREFIX "/" UNAP_PROGRAM_NAME ".log";
-    std::string strPIDPath = UNAP_TEMP_PREFIX "/" UNAP_PROGRAM_NAME ".pid";
+    std::string strLogPath = LANSINK_TEMP_PREFIX "/" LANSINK_PROGRAM_NAME ".log";
+    std::string strPIDPath = LANSINK_TEMP_PREFIX "/" LANSINK_PROGRAM_NAME ".pid";
     std::string strHost = "";
     std::string strALSADevice = "default";
     int nLogLevel = 0;
@@ -75,4 +75,4 @@ private:
     Impl *m_pImpl;
 };
 
-#endif /* SETTINGS_H_ */
+#endif /* LANSINK_SETTINGS_H_ */

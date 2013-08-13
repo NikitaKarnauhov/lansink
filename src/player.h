@@ -29,24 +29,24 @@
     POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef PLAYER_H_
-#define PLAYER_H_
+#ifndef LANSINK_PLAYER_H_
+#define LANSINK_PLAYER_H_
 
-#include <unap.pb.h>
+#include <lansink.pb.h>
 #include "log.h"
 
 class Player {
 public:
     ~Player();
 
-    static Player *get(unap::Packet &_packet, Log &_log);
+    static Player *get(lansink::Packet &_packet, Log &_log);
     static void remove(Player *_pPlayer);
     static void remove_stopped();
 
     bool is_prepared() const;
-    void init(unap::Packet &_packet);
+    void init(lansink::Packet &_packet);
     void run();
-    void play(unap::Packet &_packet);
+    void play(lansink::Packet &_packet);
     uint64_t get_id() const;
 
 private:
@@ -56,4 +56,4 @@ private:
     Player(uint64_t _cStreamId, Log &_log);
 };
 
-#endif /* PLAYER_H_ */
+#endif /* LANSINK_PLAYER_H_ */

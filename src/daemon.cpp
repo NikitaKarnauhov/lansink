@@ -59,7 +59,7 @@
 
 #include <alsa/asoundlib.h>
 
-#include <unap.pb.h>
+#include <lansink.pb.h>
 #include "log.h"
 #include "alsa.h"
 #include "player.h"
@@ -72,8 +72,8 @@ static
 void _print_usage(std::ostream &_os) {
     static const Settings c_defaults;
 
-    _os << "UNAPd, network audio receiver.\n" <<
-            "Usage: unapd [OPTION]...\n\n" <<
+    _os << "d, network audio receiver.\n" <<
+            "Usage: " LANSINK_PROGRAM_NAME " [OPTION]...\n\n" <<
             "  -h, --help                       Print this message and exit.\n" <<
             "  -v, --version                    Display the version and exit.\n" <<
             "  -c, --config-path PATH           Set configuration file location.\n" <<
@@ -95,7 +95,7 @@ void _print_usage(std::ostream &_os) {
 
 static
 void _print_version() {
-    std::cout << "UNAPd, network audio receiver.\n" <<
+    std::cout << LANSINK_PROGRAM_NAME << ", network audio receiver.\n" <<
             "Version 0.1" << std::endl;
 }
 
@@ -237,7 +237,7 @@ void _main(Log &_log) {
     struct pollfd fd{nSocket, POLLIN, 0};
     constexpr size_t cBufferSize = 1024*100; // Should be enough, right?
     auto pBuf = std::unique_ptr<char[]>(new char[cBufferSize]);
-    std::list<unap::Packet> packets;
+    std::list<lansink::Packet> packets;
 
     typedef std::chrono::steady_clock Clock;
     typedef std::chrono::duration<int, std::milli> Duration;
@@ -258,7 +258,7 @@ void _main(Log &_log) {
                 if (nPacketSize < 0)
                     throw SystemError("recvfrom()");
 
-                unap::Packet &packet = *packets.emplace(packets.end());
+                lansink::Packet &packet = *packets.emplace(packets.end());
 
                 if (!packet.ParseFromArray(pBuf.get(), nPacketSize)) {
                     _log.debug("Broken packet from %s", _in_addr_to_string(&sender).c_str());

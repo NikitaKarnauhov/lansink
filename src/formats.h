@@ -29,8 +29,8 @@
     POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef FORMATS_H_
-#define FORMATS_H_
+#ifndef LANSINK_FORMATS_H_
+#define LANSINK_FORMATS_H_
 
 #include <string>
 #include <map>
@@ -49,4 +49,4 @@ extern Formats g_formats;
 std::string get_format_name(snd_pcm_format_t _format);
 snd_pcm_format_t get_format(const std::string &_name);
 
-#endif /* FORMATS_H_ */
+#endif /* LANSINK_FORMATS_H_ */

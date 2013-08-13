@@ -1,5 +1,5 @@
 /*
-    unap.proto
+    lansink.proto
 
     Copyright (c) 2013, Nikita Karnauhov
 
@@ -29,7 +29,7 @@
     POSSIBILITY OF SUCH DAMAGE.
 */
 
-package unap;
+package lansink;
 
 message Packet {
 	enum Kind {

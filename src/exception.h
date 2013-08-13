@@ -29,8 +29,8 @@
     POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef EXCEPTION_H_
-#define EXCEPTION_H_
+#ifndef LANSINK_EXCEPTION_H_
+#define LANSINK_EXCEPTION_H_
 
 #include <string>
 #include <stdexcept>
@@ -69,4 +69,4 @@ private:
     int m_nError;
 };
 
-#endif /* EXCEPTION_H_ */
+#endif /* LANSINK_EXCEPTION_H_ */

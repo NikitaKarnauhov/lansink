@@ -29,8 +29,8 @@
     POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef SENDER_H_
-#define SENDER_H_
+#ifndef LANSINK_SENDER_H_
+#define LANSINK_SENDER_H_
 
 #include <string>
 #include <vector>
@@ -45,7 +45,7 @@
 #include <alsa/pcm_external.h>
 
 #include "log.h"
-#include "unap.pb.h"
+#include "lansink.pb.h"
 
 class Sender : public snd_pcm_ioplug_t {
 public:
@@ -93,4 +93,4 @@ private:
     Impl *m_pImpl;
 };
 
-#endif /* SENDER_H_ */
+#endif /* LANSINK_SENDER_H_ */

@@ -54,7 +54,7 @@ namespace callbacks {
 
 extern "C" {
 
-int unap_start(snd_pcm_ioplug_t *_pPlug) {
+int lansink_start(snd_pcm_ioplug_t *_pPlug) {
     Sender *pPlug = (Sender *)_pPlug->private_data;
 
     try {
@@ -67,7 +67,7 @@ int unap_start(snd_pcm_ioplug_t *_pPlug) {
     return 0;
 }
 
-int unap_stop(snd_pcm_ioplug_t *_pPlug) {
+int lansink_stop(snd_pcm_ioplug_t *_pPlug) {
     Sender *pPlug = (Sender *)_pPlug->private_data;
 
     try {
@@ -80,7 +80,7 @@ int unap_stop(snd_pcm_ioplug_t *_pPlug) {
     return 0;
 }
 
-snd_pcm_sframes_t unap_pointer(snd_pcm_ioplug_t *_pPlug) {
+snd_pcm_sframes_t lansink_pointer(snd_pcm_ioplug_t *_pPlug) {
     Sender *pPlug = (Sender *)_pPlug->private_data;
     snd_pcm_sframes_t nResult = 0;
 
@@ -94,7 +94,7 @@ snd_pcm_sframes_t unap_pointer(snd_pcm_ioplug_t *_pPlug) {
     return nResult;
 }
 
-snd_pcm_sframes_t unap_transfer(snd_pcm_ioplug_t *_pPlug, const snd_pcm_channel_area_t *_pAreas,
+snd_pcm_sframes_t lansink_transfer(snd_pcm_ioplug_t *_pPlug, const snd_pcm_channel_area_t *_pAreas,
         snd_pcm_uframes_t _cOffset, snd_pcm_uframes_t _cSize)
 {
     Sender *pPlug = (Sender *)_pPlug->private_data;
@@ -118,7 +118,7 @@ snd_pcm_sframes_t unap_transfer(snd_pcm_ioplug_t *_pPlug, const snd_pcm_channel_
     return cFrames;
 }
 
-int unap_close(snd_pcm_ioplug_t *_pPlug) {
+int lansink_close(snd_pcm_ioplug_t *_pPlug) {
     Sender *pPlug = (Sender *)_pPlug->private_data;
 
     try {
@@ -133,7 +133,7 @@ int unap_close(snd_pcm_ioplug_t *_pPlug) {
     return 0;
 }
 
-int unap_prepare(snd_pcm_ioplug_t *_pPlug) {
+int lansink_prepare(snd_pcm_ioplug_t *_pPlug) {
     Sender *pPlug = (Sender *)_pPlug->private_data;
 
     try {
@@ -146,7 +146,7 @@ int unap_prepare(snd_pcm_ioplug_t *_pPlug) {
     return 0;
 }
 
-int unap_drain(snd_pcm_ioplug_t *_pPlug) {
+int lansink_drain(snd_pcm_ioplug_t *_pPlug) {
     Sender *pPlug = (Sender *)_pPlug->private_data;
 
     try {
@@ -159,7 +159,7 @@ int unap_drain(snd_pcm_ioplug_t *_pPlug) {
     return 0;
 }
 
-int unap_pause(snd_pcm_ioplug_t *_pPlug, int _bEnable) {
+int lansink_pause(snd_pcm_ioplug_t *_pPlug, int _bEnable) {
     Sender *pPlug = (Sender *)_pPlug->private_data;
 
     try {
@@ -176,7 +176,7 @@ int unap_pause(snd_pcm_ioplug_t *_pPlug, int _bEnable) {
     return 0;
 }
 
-int unap_poll_revents(snd_pcm_ioplug_t *_pPlug, struct pollfd *_pFD, unsigned int _cFDs,
+int lansink_poll_revents(snd_pcm_ioplug_t *_pPlug, struct pollfd *_pFD, unsigned int _cFDs,
         unsigned short *_pREvents)
 {
     Sender *pPlug = (Sender *)_pPlug->private_data;
@@ -203,7 +203,7 @@ int unap_poll_revents(snd_pcm_ioplug_t *_pPlug, struct pollfd *_pFD, unsigned in
     return 0;
 }
 
-int unap_delay(snd_pcm_ioplug_t *_pPlug, snd_pcm_sframes_t *_pnDelay) {
+int lansink_delay(snd_pcm_ioplug_t *_pPlug, snd_pcm_sframes_t *_pnDelay) {
     Sender *pPlug = (Sender *)_pPlug->private_data;
 
     try {
@@ -221,23 +221,23 @@ snd_pcm_ioplug_callback_t &get() {
     static bool s_bInitialized = false;
 
     if (!s_bInitialized) {
-        s_callbacks.start = callbacks::unap_start;
-        s_callbacks.stop = callbacks::unap_stop;
-        s_callbacks.pointer = callbacks::unap_pointer;
-        s_callbacks.transfer = callbacks::unap_transfer;
-        s_callbacks.close = callbacks::unap_close;
+        s_callbacks.start = callbacks::lansink_start;
+        s_callbacks.stop = callbacks::lansink_stop;
+        s_callbacks.pointer = callbacks::lansink_pointer;
+        s_callbacks.transfer = callbacks::lansink_transfer;
+        s_callbacks.close = callbacks::lansink_close;
         s_callbacks.hw_params = nullptr;
         s_callbacks.hw_free = nullptr;
         s_callbacks.sw_params = nullptr;
-        s_callbacks.prepare = callbacks::unap_prepare;
-        s_callbacks.drain = callbacks::unap_drain;
-        s_callbacks.pause = callbacks::unap_pause;
+        s_callbacks.prepare = callbacks::lansink_prepare;
+        s_callbacks.drain = callbacks::lansink_drain;
+        s_callbacks.pause = callbacks::lansink_pause;
         s_callbacks.resume = nullptr;
         s_callbacks.poll_descriptors_count = nullptr;
         s_callbacks.poll_descriptors = nullptr;
-        s_callbacks.poll_revents = callbacks::unap_poll_revents;
+        s_callbacks.poll_revents = callbacks::lansink_poll_revents;
         s_callbacks.dump = nullptr;
-        s_callbacks.delay = callbacks::unap_delay;
+        s_callbacks.delay = callbacks::lansink_delay;
         s_bInitialized = true;
     }
 
@@ -273,7 +273,7 @@ void _set_hw_constraint(struct Sender *_pPlug)
 }
 
 extern "C"
-SND_PCM_PLUGIN_DEFINE_FUNC(unap) {
+SND_PCM_PLUGIN_DEFINE_FUNC(lansink) {
     snd_config_iterator_t i, next;
     Sender *pPlug = new(calloc(1, sizeof(Sender))) Sender;
 
@@ -414,7 +414,7 @@ SND_PCM_PLUGIN_DEFINE_FUNC(unap) {
 
         pPlug->connect();
         pPlug->version = SND_PCM_IOPLUG_VERSION;
-        pPlug->name = "UNAP Protocol";
+        pPlug->name = "LANSink Protocol";
         pPlug->mmap_rw = 0;
         pPlug->callback = &callbacks::get();
         pPlug->private_data = pPlug;
@@ -432,5 +432,5 @@ SND_PCM_PLUGIN_DEFINE_FUNC(unap) {
 }
 
 extern "C" {
-    SND_PCM_PLUGIN_SYMBOL(unap);
+    SND_PCM_PLUGIN_SYMBOL(lansink);
 }

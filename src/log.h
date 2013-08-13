@@ -29,8 +29,8 @@
     POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef UNAP_LOG_H_
-#define UNAP_LOG_H_
+#ifndef LANSINK_LOG_H_
+#define LANSINK_LOG_H_
 
 #include <string>
 
@@ -81,4 +81,4 @@ private:
     Impl *m_pImpl;
 };
 
-#endif /* UNAP_LOG_H_ */
+#endif /* LANSINK_LOG_H_ */
