@@ -277,8 +277,14 @@ void Player::Impl::run() {
                     }
 
                     if (m_bClosed) {
-                        m_pLog->info("Closing stream %llu", m_cStreamId);
-                        ALSA::close(m_pPcm);
+                        if (m_nLastError != 0) {
+                            m_pLog->info("Closing stream %llu", m_cStreamId);
+                            ALSA::close(m_pPcm);
+                        } else {
+                            m_pLog->info("Draining stream %llu", m_cStreamId);
+                            ALSA::drain(m_pPcm);
+                        }
+
                         m_pPcm = nullptr;
                         break;
                     }
