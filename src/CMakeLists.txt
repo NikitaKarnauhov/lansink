@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 2.8.5)
 
 set(CLIENT asound_module_pcm_lansink)
 set(SERVER lansinkd)
