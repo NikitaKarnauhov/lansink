@@ -32,16 +32,19 @@
 #ifndef LANSINK_PLAYER_H_
 #define LANSINK_PLAYER_H_
 
+#include <chrono>
 #include <lansink.pb.h>
 #include "log.h"
 
 class Player {
 public:
+    typedef std::chrono::high_resolution_clock::time_point TimePoint;
+
     ~Player();
 
-    static Player *get(lansink::Packet &_packet, Log &_log);
+    static Player *get(lansink::Packet &_packet, Log &_log, TimePoint &_closeTime);
     static void remove(Player *_pPlayer);
-    static void remove_stopped();
+    static bool remove_stopped(TimePoint &_closeTime);
 
     bool is_prepared() const;
     void init(lansink::Packet &_packet);

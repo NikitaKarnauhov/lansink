@@ -275,11 +275,12 @@ void _main(Log &_log) {
                         continue;
                 }
 
-                Player *pPlayer = Player::get(packet, _log);
+                Player::TimePoint errorTime;
+                Player *pPlayer = Player::get(packet, _log, errorTime);
 
                 if (!pPlayer) {
                     _log.info("Dropping connection from %s: device is busy", _in_addr_to_string(&sender).c_str());
-                    m_lastOpenAttempt = Clock::now();
+                    m_lastOpenAttempt = TimePoint(errorTime.time_since_epoch());
                     continue;
                 }
 

@@ -35,7 +35,6 @@
 #include <set>
 #include <thread>
 #include <mutex>
-#include <chrono>
 #include <condition_variable>
 
 #include <alsa/asoundlib.h>
@@ -93,7 +92,7 @@ public:
 
     static Player *get(lansink::Packet &_packet, Log &_log);
     static void remove(uint64_t _cId);
-    static void remove_stopped();
+    static bool remove_stopped(TimePoint &_closeTime);
 
     bool is_prepared() const {
         return m_pPcm != nullptr;
@@ -122,6 +121,7 @@ private:
     bool m_bPaused;
     bool m_bClosed;
     std::condition_variable m_dataAvailable;
+    int m_nLastError;
 
     typedef std::chrono::high_resolution_clock Clock;
     typedef std::chrono::duration<int, std::milli> Duration;
@@ -164,17 +164,29 @@ void Player::Impl::remove(uint64_t _cId) {
     s_players.erase(iPlayer);
 }
 
-void Player::Impl::remove_stopped() {
+bool Player::Impl::remove_stopped(TimePoint &_closeTime) {
     std::lock_guard<std::mutex> lock(s_playerMapMutex);
+    bool bNoErrors = true;
+
+    _closeTime = Clock::now();
 
     for (auto iPlayer = s_players.begin(); iPlayer != s_players.end();)
         if (!iPlayer->second->is_prepared()) {
             if (iPlayer->second->m_pImpl->m_worker.joinable())
                 iPlayer->second->m_pImpl->m_worker.join();
+
+            if (iPlayer->second->m_pImpl->m_lastWrite < _closeTime)
+                _closeTime = iPlayer->second->m_pImpl->m_lastWrite;
+
+            if (iPlayer->second->m_pImpl->m_nLastError != 0)
+                bNoErrors = false;
+
             delete iPlayer->second;
             iPlayer = s_players.erase(iPlayer);
         } else
             ++iPlayer;
+
+    return bNoErrors;
 }
 
 void Player::Impl::init(lansink::Packet &_packet) {
@@ -248,9 +260,10 @@ void Player::Impl::play(lansink::Packet &_packet) {
 }
 
 void Player::Impl::run() {
+    m_nLastError = 0;
+
     m_worker = std::thread([&]() {
         try {
-            int nLastError = 0;
             bool bPrevPaused = false;
 
             while (true) {
@@ -273,7 +286,7 @@ void Player::Impl::run() {
                     bPrevPaused = m_bPaused;
                 }
 
-                if (nLastError < 0) {
+                if (m_nLastError < 0) {
                     std::unique_lock<std::mutex> lock(m_mutex);
 
                     m_pLog->info("Waiting for recovery (timeout %d seconds)",
@@ -294,8 +307,8 @@ void Player::Impl::run() {
                     // Try to recover if error occurred.
                     m_pLog->info("Recovering...");
 
-                    ALSA::recover(m_pPcm, nLastError, true);
-                    nLastError = 0;
+                    ALSA::recover(m_pPcm, m_nLastError, true);
+                    m_nLastError = 0;
 
                     continue;
                 }
@@ -318,17 +331,15 @@ void Player::Impl::run() {
 
                     snd_pcm_sframes_t nDelay;
 
-#ifndef NDEBUG
+                    _add_samples(nFrames, true);
+                    m_lastWrite = Clock::now();
                     ALSA::delay(m_pPcm, &nDelay);
+
+#ifndef NDEBUG
                     Duration ms(std::chrono::duration_cast<Duration>(Clock::now() - m_lastWrite));
                     m_pLog->debug("Time since last write: %d ms; delay: %d; state: %d",
                             ms.count(), nDelay, snd_pcm_state(m_pPcm));
 #endif
-
-                    _add_samples(nFrames, true);
-                    m_lastWrite = Clock::now();
-
-                    ALSA::delay(m_pPcm, &nDelay);
 
                     if (ALSA::state(m_pPcm) == SND_PCM_STATE_PREPARED &&
                             nDelay >= (snd_pcm_sframes_t)m_cBufferSize/2)
@@ -342,9 +353,14 @@ void Player::Impl::run() {
                     if (e.get_error() == -EPIPE) {
                         Duration ms(std::chrono::duration_cast<Duration>(Clock::now() - m_lastWrite));
                         m_pLog->warning("XRUN: %d ms since last write", ms.count());
+                    } else if (e.get_error() == -EIO) {
+                        // Cannot recover from EIO: someone tells us device was unplugged.
+                        m_bClosed = true;
                     }
 
-                    nLastError = e.get_error();
+                    std::lock_guard<std::mutex> lock(m_mutex);
+
+                    m_nLastError = e.get_error();
                 }
             }
         } catch (std::exception &e) {
@@ -469,8 +485,9 @@ Player::~Player() {
     delete m_pImpl;
 }
 
-Player *Player::get(lansink::Packet &_packet, Log &_log) {
-    Player::remove_stopped();
+Player *Player::get(lansink::Packet &_packet, Log &_log, TimePoint &_closeTime) {
+    if (!Player::remove_stopped(_closeTime))
+        return nullptr;
     return Impl::get(_packet, _log);
 }
 
@@ -478,8 +495,8 @@ void Player::remove(Player *_pPlayer) {
     Impl::remove(_pPlayer->get_id());
 }
 
-void Player::remove_stopped() {
-    Impl::remove_stopped();
+bool Player::remove_stopped(TimePoint &_closeTime) {
+    return Impl::remove_stopped(_closeTime);
 }
 
 bool Player::is_prepared() const {
