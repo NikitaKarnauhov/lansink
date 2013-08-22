@@ -87,14 +87,14 @@ private:
     std::thread m_worker;
     mutable std::mutex m_mutex;
     int m_nSockWorker;
-    TimePoint m_startTime;
+    mutable TimePoint m_startTime;
     TimePoint m_lastFrameTime;
-    snd_pcm_sframes_t m_nLastFrames;
+    mutable snd_pcm_sframes_t m_nLastFrames;
     snd_pcm_sframes_t m_nFramesQueued;
     snd_pcm_sframes_t m_nPointer;
     std::list<std::string> m_queue;
     std::unique_ptr<char[]> m_pBuffer;
-    Status m_status;
+    mutable Status m_status;
     bool m_bPrepared;
     int m_nSocket;
     static unsigned int s_cSeed;
@@ -113,6 +113,7 @@ private:
     void _send_pause();
     void _send_unpause();
     void _send_stop();
+    snd_pcm_sframes_t _get_delay() const;
 };
 
 unsigned int Sender::Impl::s_cSeed = 0;
@@ -148,6 +149,8 @@ Sender::Status Sender::Impl::get_status() const {
 }
 
 void Sender::Impl::start() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
     _reset(false);
     m_status = Sender::usRunning;
     m_startTime = Clock::now();
@@ -155,6 +158,7 @@ void Sender::Impl::start() {
 }
 
 void Sender::Impl::stop() {
+    // FIXME race condition.
     if (m_status & Sender::usRunning)
         _send_stop();
 
@@ -165,10 +169,12 @@ void Sender::Impl::stop() {
 }
 
 snd_pcm_sframes_t Sender::Impl::get_buffer_pointer() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
     if (!m_bPrepared)
         return 0;
 
-    const snd_pcm_sframes_t nDelay = get_delay();
+    const snd_pcm_sframes_t nDelay = _get_delay();
     snd_pcm_sframes_t nPointer = snd_pcm_sframes_t(m_pPlug->appl_ptr) - nDelay;
 
     if (nPointer < 0) {
@@ -182,9 +188,8 @@ snd_pcm_sframes_t Sender::Impl::get_buffer_pointer() const {
 }
 
 snd_pcm_sframes_t Sender::Impl::transfer(const char *_pData, size_t _cOffset, size_t _cSize) {
-    assert(m_bPrepared);
-
     std::lock_guard<std::mutex> lock(m_mutex);
+
     const size_t cSizeBytes = _cSize*get_bytes_per_frame();
 
     if (cSizeBytes == 0)
@@ -200,6 +205,18 @@ snd_pcm_sframes_t Sender::Impl::transfer(const char *_pData, size_t _cOffset, si
 }
 
 void Sender::Impl::prepare() {
+    // FIXME race condition.
+    // Stop thread first.
+    if (m_status & Sender::usRunning) {
+        m_status = Sender::usStopping;
+
+        if (m_worker.joinable())
+            m_worker.join();
+
+        m_status = Sender::usStopped;
+    }
+
+    std::lock_guard<std::mutex> lock(m_mutex);
     const std::string strOldFormat = m_strFormat;
     const size_t cOldRate = m_cBitsPerSample;
     const size_t cOldChannels = m_cChannels;
@@ -222,13 +239,19 @@ void Sender::Impl::prepare() {
 }
 
 void Sender::Impl::drain() {
+    // FIXME race condition.
     assert(m_bPrepared);
     m_status = Sender::usStopping;
+
     if (m_worker.joinable())
         m_worker.join();
+
+    m_status = Sender::usStopped;
 }
 
 void Sender::Impl::pause() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
     assert(m_bPrepared && m_status == Sender::usRunning);
     m_nLastFrames = _estimate_frames();
     m_status = Sender::usPaused;
@@ -236,11 +259,13 @@ void Sender::Impl::pause() {
 }
 
 void Sender::Impl::unpause() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
     m_status = Sender::usRunning;
     m_startTime = Clock::now();
 }
 
-snd_pcm_sframes_t Sender::Impl::get_delay() const {
+snd_pcm_sframes_t Sender::Impl::_get_delay() const {
     if (!m_bPrepared)
         return m_pPlug->get_buffer_size();
 
@@ -252,10 +277,23 @@ snd_pcm_sframes_t Sender::Impl::get_delay() const {
         m_pPlug->log.warning("nDelay > get_buffer_size() (%d > %d)",
                 nDelay, m_pPlug->get_buffer_size());
 
-    if (nDelay == 0)
-        m_pPlug->log.warning("XRUN, nDelay == 0");
+    if ((m_status & Sender::usRunning) && nDelay == 0) {
+        if (m_status != Sender::usUnderrun) {
+            m_pPlug->log.warning("XRUN");
+            m_nLastFrames = nEstimated;
+            m_status = Sender::usUnderrun;
+            m_startTime = TimePoint();
+        }
+
+        return -EPIPE;
+    }
 
     return nDelay;
+}
+
+snd_pcm_sframes_t Sender::Impl::get_delay() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return _get_delay();
 }
 
 void Sender::Impl::_reset(bool _bResetStreamParams) {
@@ -297,9 +335,12 @@ void Sender::Impl::_init_descriptors() {
 }
 
 snd_pcm_sframes_t Sender::Impl::_estimate_frames() const {
-    if ((m_status & Sender::usRunning) == 0 || m_status == Sender::usPaused)
+    if ((m_status & Sender::usRunning) == 0 || m_status == Sender::usPaused ||
+            m_status == Sender::usUnderrun)
         return m_nLastFrames;
+
     Duration ms(std::chrono::duration_cast<Duration>(Clock::now() - m_startTime));
+
     return m_nLastFrames + ms.count()*(m_pPlug->get_rate()/1000.0);
 }
 
@@ -310,44 +351,47 @@ snd_pcm_sframes_t Sender::Impl::_get_frames_required() const {
 
 std::function<void(void)> Sender::Impl::_make_worker() {
     return [&]() {
-        try {
-            if (!m_nSockWorker)
-                return;
+        if (!m_nSockWorker)
+            return;
 
-            Status prev = Sender::usRunning;
-            const int nSendThresholdFrames = (m_pPlug->nMTU - 100)/get_bytes_per_frame();
+        Status prev = Sender::usRunning;
+        const int nSendThresholdFrames = (m_pPlug->nMTU - 100)/get_bytes_per_frame();
 
-            while (m_status & Sender::usRunning) {
+        while (m_status & Sender::usRunning) {
+            try {
                 if (prev == Sender::usRunning && m_status == Sender::usPaused)
                     _send_pause();
                 else if (prev == Sender::usPaused && m_status == Sender::usRunning)
                     _send_unpause();
 
-                {
-                    std::lock_guard<std::mutex> lock(m_mutex);
+                std::lock_guard<std::mutex> lock(m_mutex);
 
-                    if (!m_queue.empty()) {
-                        while (!m_queue.empty() && (
-                                m_status != Sender::usRunning ||
-                                m_nFramesQueued >= nSendThresholdFrames))
-                            _send_data();
-                    } else if (m_bPrepared && m_status == Sender::usStopping && _estimate_frames() >= m_nPointer) {
-                        _send_stop();
-                        m_status = Sender::usStopped;
-                    }
+                if (!m_queue.empty()) {
+                    while (!m_queue.empty() && (
+                            m_status != Sender::usRunning ||
+                            m_nFramesQueued >= nSendThresholdFrames))
+                        _send_data();
+                } else if (m_bPrepared && m_status == Sender::usStopping && _estimate_frames() >= m_nPointer) {
+                    _send_stop();
+                    m_status = Sender::usStopped;
                 }
 
-                // Don't wake up the other party unless there is buffer space available.
-                if (get_delay() < (snd_pcm_sframes_t)m_pPlug->get_buffer_size()) {
+                if (_get_delay() < (snd_pcm_sframes_t)m_pPlug->get_buffer_size()) {
+                    // Don't wake up the other party unless there is buffer space available.
                     char buf[1] = {0};
                     write(m_nSockWorker, buf, 1);
+                } else if (m_status == Sender::usUnderrun) {
+                    // Resume if buffer filled up after underrun.
+                    m_pPlug->log.info("Resuming after XRUN");
+                    m_status = Sender::usRunning;
+                    m_startTime = Clock::now();
                 }
-
-                prev = m_status;
-                std::this_thread::sleep_for(std::chrono::milliseconds(m_pPlug->nSendPeriod));
+            } catch (std::exception &e) {
+                m_pPlug->log.error(e.what());
             }
-        } catch (std::exception &e) {
-            m_pPlug->log.error(e.what());
+
+            prev = m_status;
+            std::this_thread::sleep_for(std::chrono::milliseconds(m_pPlug->nSendPeriod));
         }
     };
 }

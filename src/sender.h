@@ -63,7 +63,8 @@ public:
         usRunning = 0x40,
         usStopped = 0x01,
         usStopping = 0x02 | usRunning,
-        usPaused = 0x04 | usRunning
+        usPaused = 0x04 | usRunning,
+        usUnderrun = 0x08 | usRunning
     };
 
     Sender();
