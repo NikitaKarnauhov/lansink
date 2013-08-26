@@ -126,6 +126,7 @@ int lansink_close(snd_pcm_ioplug_t *_pPlug) {
         pPlug->log.debug("%s() = %d", __FUNCTION__, 0);
         delete pPlug;
         _pPlug->private_data = NULL;
+        free(pPlug);
     } catch (std::exception &e) {
         pPlug->log.error(e.what());
     }

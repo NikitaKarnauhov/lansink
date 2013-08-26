@@ -270,6 +270,7 @@ void Player::Impl::run() {
                 {
                     std::lock_guard<std::mutex> lock(m_mutex);
 
+                    // TODO check if device can be paused.
                     if (m_bPaused != bPrevPaused) {
                         m_pLog->info("%s stream %llu", m_bPaused ? "Pausing" : "Unpausing",
                                 m_cStreamId);
@@ -426,8 +427,13 @@ void Player::Impl::_add_samples(size_t _cSamples, bool _bStopWhenEmpty) {
         // Insert silence instead of missing samples.
         try {
             while (m_cPosition < cNext) {
-                std::unique_ptr<char []> pBuf = std::unique_ptr<char []>(new char[cEnd - m_cPosition]);
-                const int nWritten = ALSA::writei(m_pPcm, pBuf.get(), cEnd - m_cPosition);
+                const size_t cSilenceFrames = cEnd - m_cPosition;
+                const size_t cSilenceBytes = cSilenceFrames*m_cFrameBytes;
+                std::unique_ptr<char []> pBuf = std::unique_ptr<char []>(new char[cSilenceBytes]);
+
+                memset(pBuf.get(), 0, cSilenceBytes);
+
+                const int nWritten = ALSA::writei(m_pPcm, pBuf.get(), cSilenceFrames);
 
                 m_cPosition += nWritten;
 
