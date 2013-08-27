@@ -85,8 +85,10 @@ public:
         m_cPosition(0), m_pLog(&_log), m_bReady(false), m_bPaused(false), m_bClosed(false) {}
 
     ~Impl() {
-        if (m_pPcm)
+        if (m_pPcm) {
             ALSA::drain(m_pPcm);
+            ALSA::close(m_pPcm);
+        }
         m_pPcm = nullptr;
     }
 
@@ -284,6 +286,7 @@ void Player::Impl::run() {
                         } else {
                             m_pLog->info("Draining stream %llu", m_cStreamId);
                             ALSA::drain(m_pPcm);
+                            ALSA::close(m_pPcm);
                         }
 
                         m_pPcm = nullptr;
