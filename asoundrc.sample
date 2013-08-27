@@ -21,8 +21,8 @@ pcm.lansink {
     send_period 10
 
     # Debug log file location.
-    log "/tmp/lansink.log"
+    # log "/tmp/lansink.log"
 
     # Log level, 0..4. Set to 0 to disable logging.
-    log_level 4
+    # log_level 4
 }
