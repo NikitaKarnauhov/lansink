@@ -82,7 +82,8 @@ public:
     Impl(uint64_t _cStreamId, Log &_log) :
         m_cStreamId(_cStreamId), m_pPcm(nullptr), m_cBufferSize(2048), m_cPeriodSize(512),
         m_format(SND_PCM_FORMAT_UNKNOWN), m_cRate(0), m_cChannelCount(0), m_cFrameBytes(0),
-        m_cPosition(0), m_pLog(&_log), m_bReady(false), m_bPaused(false), m_bClosed(false) {}
+        m_cPosition(0), m_pLog(&_log), m_bReady(false), m_bPaused(false), m_bClosed(false),
+        m_cCommandPackets(0) {}
 
     ~Impl() {
         if (m_pPcm) {
@@ -124,6 +125,7 @@ private:
     bool m_bClosed;
     std::condition_variable m_dataAvailable;
     int m_nLastError;
+    size_t m_cCommandPackets;
 
     typedef std::chrono::high_resolution_clock Clock;
     typedef std::chrono::duration<int, std::milli> Duration;
@@ -225,6 +227,8 @@ void Player::Impl::init(lansink::Packet &_packet) {
         m_cFrameBytes = ALSA::format_physical_width(get_format(_packet.format()))*_packet.channels()/8;
         m_cPosition = 0;
         m_bReady = true;
+        m_cCommandPackets = 0;
+        m_queue.clear();
         m_pLog->info("Opened ALSA device \"%s\"", g_settings.strALSADevice.c_str());
     } catch (std::exception &e) {
         m_pLog->error(e.what());
@@ -247,11 +251,14 @@ void Player::Impl::play(lansink::Packet &_packet) {
             _packet.version(), _packet.stream(), _packet.kind(), _packet.format().c_str(),
             _packet.channels(), _packet.rate(), _packet.timestamp(), _packet.samples().size());
 
+    // We want command packets near the beginning of the queue.
     if (_packet.kind() != lansink::Packet_Kind_DATA && m_cPosition != 0)
         _packet.set_timestamp(m_cPosition);
 
     if (m_cPosition <= _packet.timestamp()) {
-        m_queue.insert(new Samples(_packet));
+        if (m_queue.insert(new Samples(_packet)).second)
+            if (_packet.kind() != lansink::Packet_Kind_DATA)
+                ++m_cCommandPackets;
 
         if (m_cPosition < (*m_queue.begin())->cTimestamp)
             m_cPosition = (*m_queue.begin())->cTimestamp;
@@ -385,7 +392,7 @@ void Player::Impl::_add_samples(size_t _cSamples, bool _bStopWhenEmpty) {
     assert(m_cFrameBytes > 0);
 
     // Handle control packets.
-    for (auto iSamples = m_queue.begin(); iSamples != m_queue.end();) {
+    for (auto iSamples = m_queue.begin(); m_cCommandPackets > 0 && iSamples != m_queue.end();) {
         Samples *pSamples = *iSamples;
 
         if (pSamples->kind == lansink::Packet_Kind_DATA) {
@@ -396,12 +403,15 @@ void Player::Impl::_add_samples(size_t _cSamples, bool _bStopWhenEmpty) {
         switch (pSamples->kind) {
             case lansink::Packet_Kind_PAUSE:
                 m_bPaused = true;
+                --m_cCommandPackets;
                 break;
             case lansink::Packet_Kind_UNPAUSE:
                 m_bPaused = false;
+                --m_cCommandPackets;
                 break;
             case lansink::Packet_Kind_STOP:
                 m_bClosed = true;
+                --m_cCommandPackets;
                 return;
             default:
                 throw LogicError("Unexpected packet kind %d", pSamples->kind);
