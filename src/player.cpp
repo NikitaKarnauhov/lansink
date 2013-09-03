@@ -331,10 +331,19 @@ void Player::Impl::run() {
                 try {
                     ALSA::wait(m_pPcm, 1000);
 
-                    std::lock_guard<std::mutex> lock(m_mutex);
+                    std::unique_lock<std::mutex> lock(m_mutex);
+                    snd_pcm_sframes_t nDelay;
 
-                    if (m_queue.empty())
+                    if (m_queue.empty()) {
+                        ALSA::delay(m_pPcm, &nDelay);
+
+                        Duration ms(std::chrono::milliseconds(nDelay*1000/m_cRate));
+
+                        m_pLog->debug("Queue empty, waiting for data %d ms", ms.count());
+                        m_dataAvailable.wait_for(lock, ms,
+                                [&]() { return !m_queue.empty(); });
                         continue;
+                    }
 
                     snd_pcm_sframes_t nFrames = ALSA::avail_update(m_pPcm);
 
@@ -343,8 +352,6 @@ void Player::Impl::run() {
                     // Otherwise fill up initial portion.
                     if (nFrames > 0 && m_cPosition >= 2*m_cPeriodSize)
                         nFrames = nFrames > (snd_pcm_sframes_t)m_cPeriodSize ? m_cPeriodSize : nFrames;
-
-                    snd_pcm_sframes_t nDelay;
 
                     _add_samples(nFrames, true);
                     m_lastWrite = Clock::now();
