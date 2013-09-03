@@ -274,32 +274,31 @@ void Player::Impl::run() {
             bool bPrevPaused = false;
 
             while (true) {
-                {
+                // TODO check if device can be paused.
+                if (m_bPaused != bPrevPaused) {
+                    std::lock_guard<std::mutex> lock(m_mutex);
+                    m_pLog->info("%s stream %llu", m_bPaused ? "Pausing" : "Unpausing",
+                            m_cStreamId);
+                    ALSA::pause(m_pPcm, m_bPaused);
+                }
+
+                if (m_bClosed) {
                     std::lock_guard<std::mutex> lock(m_mutex);
 
-                    // TODO check if device can be paused.
-                    if (m_bPaused != bPrevPaused) {
-                        m_pLog->info("%s stream %llu", m_bPaused ? "Pausing" : "Unpausing",
-                                m_cStreamId);
-                        ALSA::pause(m_pPcm, m_bPaused);
+                    if (m_nLastError != 0) {
+                        m_pLog->info("Closing stream %llu", m_cStreamId);
+                        ALSA::close(m_pPcm);
+                    } else {
+                        m_pLog->info("Draining stream %llu", m_cStreamId);
+                        ALSA::drain(m_pPcm);
+                        ALSA::close(m_pPcm);
                     }
 
-                    if (m_bClosed) {
-                        if (m_nLastError != 0) {
-                            m_pLog->info("Closing stream %llu", m_cStreamId);
-                            ALSA::close(m_pPcm);
-                        } else {
-                            m_pLog->info("Draining stream %llu", m_cStreamId);
-                            ALSA::drain(m_pPcm);
-                            ALSA::close(m_pPcm);
-                        }
-
-                        m_pPcm = nullptr;
-                        break;
-                    }
-
-                    bPrevPaused = m_bPaused;
+                    m_pPcm = nullptr;
+                    break;
                 }
+
+                bPrevPaused = m_bPaused;
 
                 if (m_nLastError < 0) {
                     std::unique_lock<std::mutex> lock(m_mutex);
