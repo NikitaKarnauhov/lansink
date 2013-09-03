@@ -204,10 +204,8 @@ void Player::Impl::init(lansink::Packet &_packet) {
         ALSA::hw_params_any(m_pPcm, pParams);
         ALSA::hw_params_set_access(m_pPcm, pParams, SND_PCM_ACCESS_RW_INTERLEAVED);
         ALSA::hw_params_set_format(m_pPcm, pParams, get_format(_packet.format()));
-
-        unsigned int cRate = _packet.rate();
-
-        ALSA::hw_params_set_rate_near(m_pPcm, pParams, &cRate, 0);
+        m_cRate = _packet.rate();
+        ALSA::hw_params_set_rate_near(m_pPcm, pParams, &m_cRate, 0);
         ALSA::hw_params_set_channels(m_pPcm, pParams, _packet.channels());
         ALSA::hw_params_set_buffer_size_near(m_pPcm, pParams, &m_cBufferSize);
         ALSA::hw_params_set_period_size_near(m_pPcm, pParams, &m_cPeriodSize, NULL);
