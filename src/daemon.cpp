@@ -198,15 +198,21 @@ static
 std::string _in_addr_to_string(struct sockaddr *_pAddr) {
     char buf[INET6_ADDRSTRLEN];
     void *pInAddr = nullptr;
+    int nPort = 0;
 
-    if (_pAddr->sa_family == AF_INET)
-        pInAddr = &(((struct sockaddr_in *) _pAddr)->sin_addr);
-    else
-        pInAddr = &(((struct sockaddr_in6 *) _pAddr)->sin6_addr);
+    if (_pAddr->sa_family == AF_INET) {
+        auto p = (struct sockaddr_in *)_pAddr;
+        pInAddr = &p->sin_addr;
+        nPort = p->sin_port;
+    } else {
+        auto p = (struct sockaddr_in6 *)_pAddr;
+        pInAddr = &p->sin6_addr;
+        nPort = p->sin6_port;
+    }
 
     inet_ntop(_pAddr->sa_family, pInAddr, buf, sizeof(buf));
 
-    return buf;
+    return std::string(buf) + ":" + std::to_string(ntohs(nPort));
 }
 
 static
@@ -229,7 +235,7 @@ void _main(Log &_log) {
     if (bind(nSocket, pServerInfo->ai_addr, pServerInfo->ai_addrlen) < 0)
         throw SystemError("bind()");
 
-    _log.info("Server listening on %s:%d",
+    _log.info("Server listening on %s",
             _in_addr_to_string(pServerInfo->ai_addr).c_str(), g_settings.nPort);
 
     freeaddrinfo(pServerInfo);
@@ -250,10 +256,13 @@ void _main(Log &_log) {
                 throw SystemError("poll()");
 
             if (fd.revents & POLLIN) {
-                struct sockaddr sender = {};
+                struct sockaddr_storage sender = {};
                 socklen_t cSendSize = sizeof(sender);
+
+                bzero(&sender, sizeof(sender));
+
                 const int nPacketSize = recvfrom(
-                        fd.fd, pBuf.get(), cBufferSize, 0, &sender, &cSendSize);
+                        fd.fd, pBuf.get(), cBufferSize, 0, (struct sockaddr *)&sender, &cSendSize);
 
                 if (nPacketSize < 0)
                     throw SystemError("recvfrom()");
@@ -261,7 +270,8 @@ void _main(Log &_log) {
                 lansink::Packet &packet = *packets.emplace(packets.end());
 
                 if (!packet.ParseFromArray(pBuf.get(), nPacketSize)) {
-                    _log.debug("Broken packet from %s", _in_addr_to_string(&sender).c_str());
+                    _log.debug("Broken packet from %s",
+                            _in_addr_to_string((struct sockaddr *)&sender).c_str());
                     continue;
                 }
 
@@ -279,13 +289,15 @@ void _main(Log &_log) {
                 Player *pPlayer = Player::get(packet, _log, errorTime);
 
                 if (!pPlayer) {
-                    _log.info("Dropping connection from %s: device is busy", _in_addr_to_string(&sender).c_str());
+                    _log.info("Dropping connection from %s: device is busy",
+                            _in_addr_to_string((struct sockaddr *)&sender).c_str());
                     m_lastOpenAttempt = TimePoint(errorTime.time_since_epoch());
                     continue;
                 }
 
                 if (!pPlayer->is_prepared()) {
-                    _log.info("New connection from %s", _in_addr_to_string(&sender).c_str());
+                    _log.info("New connection from %s",
+                            _in_addr_to_string((struct sockaddr *)&sender).c_str());
                     pPlayer->init(packet);
 
                     if (pPlayer->is_prepared()) {
