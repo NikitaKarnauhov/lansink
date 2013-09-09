@@ -49,6 +49,7 @@
 #include <sstream>
 #include <iostream>
 #include <iomanip>
+#include <array>
 
 namespace callbacks {
 
