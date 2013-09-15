@@ -270,7 +270,7 @@ void _main(Log &_log) {
                 lansink::Packet &packet = *packets.emplace(packets.end());
 
                 if (!packet.ParseFromArray(pBuf.get(), nPacketSize)) {
-                    _log.debug("Broken packet from %s",
+                    _log.warning("Broken packet from %s",
                             _in_addr_to_string((struct sockaddr *)&sender).c_str());
                     continue;
                 }
