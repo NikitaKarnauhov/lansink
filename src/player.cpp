@@ -478,11 +478,11 @@ void Player::Impl::_add_samples(size_t _cSamples, bool _bStopWhenEmpty) {
                     pSamples->cTimestamp + pSamples->cOffset, cWriteSize, m_cPosition);
 
             try {
-                const size_t cBytesWritten = ALSA::writei(m_pPcm,
+                const size_t cFramesWritten = ALSA::writei(m_pPcm,
                         pSamples->getData(m_cFrameBytes), cWriteSize);
 
-                pSamples->cOffset += cBytesWritten;
-                m_cPosition += cBytesWritten;
+                pSamples->cOffset += cFramesWritten;
+                m_cPosition += cFramesWritten;
             } catch (ALSA::Error &e) {
                if (e.get_error() == -EPIPE) {
                    Duration ms(std::chrono::duration_cast<Duration>(Clock::now() - m_lastWrite));
