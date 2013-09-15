@@ -107,7 +107,6 @@ private:
     snd_pcm_sframes_t _estimate_frames() const;
     snd_pcm_sframes_t _get_frames_required() const;
     void _prepare_packet(lansink::Packet &_packet, lansink::Packet_Kind _kind, uint64_t _nTimestamp);
-    void _send_buffer(const void *_pBuf, size_t _cSize);
     void _send_packet(const lansink::Packet &_packet);
     void _send_data();
     void _send_pause();
@@ -411,23 +410,11 @@ void Sender::Impl::_prepare_packet(lansink::Packet &_packet, lansink::Packet_Kin
         _packet.set_samples("");
 }
 
-void Sender::Impl::_send_buffer(const void *_pBuf, size_t _cSize) {
-    for (size_t cRetry = 0; cRetry < 5; ++cRetry) {
-        if (send(m_nSocket, _pBuf, _cSize, 0) >= 0)
-            break;
-
-        if (errno != ECONNREFUSED)
-            throw SystemError("send()");
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
-}
-
 void Sender::Impl::_send_packet(const lansink::Packet &_packet) {
     auto pBuf = std::unique_ptr<char[]>(new char[m_pPlug->nMTU]);
     assert(_packet.ByteSize() <= m_pPlug->nMTU);
     _packet.SerializeToArray((void *)pBuf.get(), m_pPlug->nMTU);
-    _send_buffer((const void *)pBuf.get(), _packet.ByteSize());
+    send_all(m_nSocket, pBuf.get(), _packet.ByteSize(), 0);
 }
 
 void Sender::Impl::_send_stop() {
@@ -495,7 +482,7 @@ void Sender::Impl::_send_data() {
     // Send.
     assert(packet.ByteSize() <= m_pPlug->nMTU);
     packet.SerializeToArray((void *)pBuf.get(), m_pPlug->nMTU);
-    _send_buffer((const void *)pBuf.get(), packet.ByteSize());
+    send_all(m_nSocket, pBuf.get(), packet.ByteSize(), 0);
 }
 
 void Sender::Impl::connect() {

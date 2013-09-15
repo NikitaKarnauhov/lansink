@@ -32,8 +32,14 @@
 #ifndef LANSINK_UTILS_H_
 #define LANSINK_UTILS_H_
 
+#include <sys/socket.h>
+
 #include <string>
 
 std::string format(size_t _cMaxLength, const char *_strFormat, ...);
+void recv_all(int _cSock, char *_pBuf, size_t _cLen, int _nFlags);
+void send_all(int _cSock, const char *_pBuf, size_t _cLen, int _nFlags);
+void sendto_all(int _cSock, const char *_pBuf, size_t _cLen, int _nFlags,
+        __CONST_SOCKADDR_ARG _pAddr, socklen_t _cAddrLen);
 
 #endif /* LANSINK_UTILS_H_ */

@@ -30,9 +30,15 @@
 */
 
 #include <stdarg.h>
+#include <errno.h>
+#include <sys/socket.h>
 
 #include <memory>
 #include <string>
+#include <thread>
+#include <chrono>
+
+#include "exception.h"
 
 std::string format(size_t _cMaxLength, const char *_strFormat, ...) {
     std::unique_ptr<char []> str(new char[_cMaxLength]);
@@ -44,4 +50,69 @@ std::string format(size_t _cMaxLength, const char *_strFormat, ...) {
     va_end (args);
 
     return str.get();
+}
+
+void recv_all(int _cSock, char *_pBuf, size_t _cLen, int _nFlags) {
+    do {
+        ssize_t nRead = 0;
+
+        for (int nRetry = 5; nRetry >= 0; --nRetry) {
+            nRead = recv(_cSock, _pBuf, _cLen, _nFlags);
+
+            if (nRead >= 0)
+                break;
+
+            if (nRead < 0 && (errno != ECONNREFUSED || nRetry == 0))
+                throw SystemError("recv()");
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+
+        _cLen -= nRead;
+        _pBuf += nRead;
+    } while (_cLen > 0);
+}
+
+void send_all(int _cSock, const char *_pBuf, size_t _cLen, int _nFlags) {
+    do {
+        ssize_t nSent = 0;
+
+        for (int nRetry = 5; nRetry >= 0; --nRetry) {
+            nSent = send(_cSock, _pBuf, _cLen, _nFlags);
+
+            if (nSent >= 0)
+                break;
+
+            if (nSent < 0 && (errno != ECONNREFUSED || nRetry == 0))
+                throw SystemError("send()");
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+
+        _cLen -= nSent;
+        _pBuf += nSent;
+    } while (_cLen > 0);
+}
+
+void sendto_all(int _cSock, const char *_pBuf, size_t _cLen, int _nFlags,
+        __CONST_SOCKADDR_ARG _pAddr, socklen_t _cAddrLen)
+{
+    do {
+        ssize_t nSent = 0;
+
+        for (int nRetry = 5; nRetry >= 0; --nRetry) {
+            nSent = sendto(_cSock, _pBuf, _cLen, _nFlags, _pAddr, _cAddrLen);
+
+            if (nSent >= 0)
+                break;
+
+            if (nSent < 0 && (errno != ECONNREFUSED || nRetry == 0))
+                throw SystemError("send()");
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+
+        _cLen -= nSent;
+        _pBuf += nSent;
+    } while (_cLen > 0);
 }
