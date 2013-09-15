@@ -216,8 +216,7 @@ void Player::Impl::init(lansink::Packet &_packet) {
 
         snd_pcm_sw_params_alloca(&pSWParams);
         ALSA::sw_params_current(m_pPcm, pSWParams);
-        ALSA::sw_params_set_start_threshold(m_pPcm, pSWParams,
-                std::numeric_limits<snd_pcm_uframes_t>::max());
+        ALSA::sw_params_set_start_threshold(m_pPcm, pSWParams, m_cBufferSize*2);
         ALSA::sw_params(m_pPcm, pSWParams);
 
         ALSA::prepare(m_pPcm);
