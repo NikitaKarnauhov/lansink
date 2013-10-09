@@ -34,17 +34,18 @@ package lansink;
 message Packet {
 	enum Kind {
 		DATA = 0;
-		PAUSE = 1;
-		UNPAUSE = 2;
+		START = 1;
+		PAUSE = 2;
 		STOP = 3;
 	}
 
 	required fixed32 version = 1;
 	required fixed64 stream = 2;
 	required Kind kind = 3;
-	required fixed32 channels = 4;
-	required fixed32 rate = 5;
-	required string format = 6;
-	required fixed64 timestamp = 7;
-	required bytes samples = 8;
+	required bool running = 4;
+	required fixed32 channels = 5;
+	required fixed32 rate = 6;
+	required string format = 7;
+	required fixed64 timestamp = 8;
+	required bytes samples = 9;
 }

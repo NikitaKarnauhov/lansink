@@ -48,17 +48,23 @@ struct Samples {
     uint64_t cTimestamp;
     std::string data;
     size_t cOffset;
+    bool bRunning;
 
     Samples(lansink::Packet &_packet) :
         kind(_packet.kind()), cTimestamp(_packet.timestamp()),
-        data(std::move(*_packet.mutable_samples())), cOffset(0)
+        data(std::move(*_packet.mutable_samples())), cOffset(0),
+        bRunning(_packet.running())
     {
     }
 
     bool operator <(const Samples &_other) const {
-        return cTimestamp < _other.cTimestamp;
+        if (cTimestamp + cOffset != _other.cTimestamp + cOffset)
+            return cTimestamp + cOffset < _other.cTimestamp + cOffset;
+
+        return kind > _other.kind;
     }
 
+    // TODO rename
     const char *getData(size_t _cFrameBytes) const {
         return data.c_str() + cOffset*_cFrameBytes;
     }
@@ -77,13 +83,17 @@ struct PtrLess {
 
 typedef std::set<Samples *, PtrLess<Samples> > SampleQueue;
 
+constexpr size_t c_cBaseFramesAdjustmentPacketCount = 20;
+constexpr snd_pcm_sframes_t c_nBaseFramesAdjustmentThreshold = 10;
+
 class Player::Impl {
 public:
-    Impl(uint64_t _cStreamId, Log &_log, int _nResponseFD) :
-        m_cStreamId(_cStreamId), m_nResponseFD(_nResponseFD), m_pPcm(nullptr), m_cBufferSize(2048),
+    Impl(uint64_t _cStreamId, Log &_log) :
+        m_cStreamId(_cStreamId), m_pPcm(nullptr), m_cBufferSize(2048),
         m_cPeriodSize(512), m_format(SND_PCM_FORMAT_UNKNOWN), m_cRate(0), m_cChannelCount(0),
-        m_cFrameBytes(0), m_cPosition(0), m_pLog(&_log), m_bReady(false), m_bPaused(false),
-        m_bClosed(false), m_nLastError(0), m_cCommandPackets(0) {}
+        m_cFrameBytes(0), m_cFramesWritten(0), m_pLog(&_log), m_bReady(false), m_bPaused(false),
+        m_bClosed(false), m_bStarted(false), m_nLastError(0), m_bProcessCommands(false),
+        m_nBufferedFrames(0), m_averageDelay(c_cBaseFramesAdjustmentPacketCount) {}
 
     ~Impl() {
         if (m_pPcm) {
@@ -107,6 +117,7 @@ public:
     uint64_t get_id() const { return m_cStreamId; }
 
 private:
+    // TODO rearrange fields.
     uint64_t m_cStreamId;
     snd_pcm_t *m_pPcm;
     snd_pcm_uframes_t m_cBufferSize;
@@ -116,28 +127,38 @@ private:
     unsigned int m_cRate;
     size_t m_cChannelCount;
     size_t m_cFrameBytes;
-    size_t m_cPosition;
+    size_t m_cFramesWritten;
+    snd_pcm_sframes_t m_nFramesBase;
     std::thread m_worker;
     mutable std::mutex m_mutex;
     Log *m_pLog;
     bool m_bReady;
     bool m_bPaused;
     bool m_bClosed;
+    bool m_bStarted;
     std::condition_variable m_dataAvailable;
     int m_nLastError;
-    size_t m_cCommandPackets;
+    bool m_bProcessCommands;
+    snd_pcm_sframes_t m_nBufferedFrames;
+    MovingAverage<snd_pcm_sframes_t> m_averageDelay;
 
     typedef std::chrono::high_resolution_clock Clock;
-    typedef std::chrono::duration<int, std::milli> Duration;
+    typedef std::chrono::duration<int, std::milli> MilliSeconds;
     typedef std::chrono::time_point<Clock> TimePoint;
 
-    TimePoint m_lastWrite;
+    TimePoint m_lastWrite, m_startTime;
+    Clock::duration m_elapsed;
 
     typedef std::map<uint64_t, Player *> Players;
     static Players s_players;
     static std::mutex s_playerMapMutex;
 
-    void _add_samples(size_t _cSamples, bool _bStopWhenEmpty);
+    void _add_samples(size_t _cFrames);
+    void _add_silence(size_t _cFrames);
+    void _handle_commands();
+    bool _handle_command(lansink::Packet_Kind _kind, Samples *_pPacket);
+    const Samples *_find_first_data_packet() const;
+    snd_pcm_sframes_t _get_buffered_frames();
 };
 
 Player *Player::Impl::get(lansink::Packet &_packet, Log &_log) {
@@ -222,10 +243,17 @@ void Player::Impl::init(lansink::Packet &_packet) {
         ALSA::prepare(m_pPcm);
 
         m_cFrameBytes = ALSA::format_physical_width(get_format(_packet.format()))*_packet.channels()/8;
-        m_cPosition = 0;
+        m_cFramesWritten = 0;
+        m_nFramesBase = std::numeric_limits<snd_pcm_sframes_t>::max();
         m_bReady = true;
-        m_cCommandPackets = 0;
+        m_bProcessCommands = false;
         m_queue.clear();
+        m_elapsed = Clock::duration(0);
+        m_startTime = TimePoint();
+        m_bPaused = true;
+        m_bStarted = false;
+        m_nBufferedFrames = 0;
+        m_averageDelay.clear();
         m_pLog->info("Opened ALSA device \"%s\"", g_settings.strALSADevice.c_str());
     } catch (std::exception &e) {
         m_pLog->error(e.what());
@@ -248,17 +276,21 @@ void Player::Impl::play(lansink::Packet &_packet) {
             _packet.version(), _packet.stream(), _packet.kind(), _packet.format().c_str(),
             _packet.channels(), _packet.rate(), _packet.timestamp(), _packet.samples().size());
 
-    // We want command packets near the beginning of the queue.
-    if (_packet.kind() != lansink::Packet_Kind_DATA && m_cPosition != 0)
-        _packet.set_timestamp(m_cPosition);
+    if (!m_bStarted) {
+        m_nFramesBase = std::min<snd_pcm_sframes_t>(_packet.timestamp(), m_nFramesBase);
+        m_cFramesWritten = m_nFramesBase;
+    }
 
-    if (m_cPosition <= _packet.timestamp()) {
+    if (_packet.kind() != lansink::Packet_Kind_DATA) {
         if (m_queue.insert(new Samples(_packet)).second)
-            if (_packet.kind() != lansink::Packet_Kind_DATA)
-                ++m_cCommandPackets;
+            m_bProcessCommands = true;
+    } else {
+        Samples *pSamples = new Samples(_packet);
 
-        if (m_cPosition < (*m_queue.begin())->cTimestamp)
-            m_cPosition = (*m_queue.begin())->cTimestamp;
+        if (pSamples->bRunning == m_bPaused)
+            m_bProcessCommands = true;
+
+        m_queue.insert(pSamples);
     }
 
     if (!m_queue.empty())
@@ -270,14 +302,21 @@ void Player::Impl::run() {
 
     m_worker = std::thread([&]() {
         try {
-            bool bPrevPaused = false;
+            bool bPrevPaused = m_bPaused;
 
             while (true) {
                 // TODO check if device can be paused.
-                if (m_bPaused != bPrevPaused) {
+                if (m_bStarted && m_bPaused != bPrevPaused) {
                     std::lock_guard<std::mutex> lock(m_mutex);
+
                     m_pLog->info("%s stream %llu", m_bPaused ? "Pausing" : "Unpausing",
                             m_cStreamId);
+
+                    if (m_bPaused)
+                        m_nBufferedFrames = _get_buffered_frames();
+                    else
+                        m_averageDelay.clear();
+
                     ALSA::pause(m_pPcm, m_bPaused);
                 }
 
@@ -291,6 +330,7 @@ void Player::Impl::run() {
                         m_pLog->info("Draining stream %llu", m_cStreamId);
                         ALSA::drain(m_pPcm);
                         ALSA::close(m_pPcm);
+                        // FIXME preserve unplayed queued packets that possibly are from new connection.
                     }
 
                     m_pPcm = nullptr;
@@ -333,45 +373,56 @@ void Player::Impl::run() {
                     snd_pcm_sframes_t nDelay;
 
                     if (m_queue.empty()) {
-                        ALSA::delay(m_pPcm, &nDelay);
+                        if (m_bPaused)
+                            nDelay = m_cPeriodSize; // Don't wake up early if we're paused anyway.
+                        else
+                            nDelay = _get_buffered_frames();
 
-                        Duration ms(std::chrono::milliseconds(nDelay*1000/m_cRate));
+                        // Try to wakeup before underrun happens.
+                        constexpr int c_nMarginMS = 5;
+                        MilliSeconds ms(std::chrono::milliseconds(
+                                std::max<int>(0, nDelay*1000/m_cRate - c_nMarginMS)));
 
                         m_pLog->debug("Queue empty, waiting for data %d ms", ms.count());
                         m_dataAvailable.wait_for(lock, ms,
                                 [&]() { return !m_queue.empty(); });
-                        continue;
                     }
+
+                    if (m_queue.empty() && m_bPaused)
+                        continue;
 
                     snd_pcm_sframes_t nFrames = ALSA::avail_update(m_pPcm);
 
                     m_pLog->debug("%d frames can be written", nFrames);
 
                     // Otherwise fill up initial portion.
-                    if (nFrames > 0 && m_cPosition >= 2*m_cPeriodSize)
+                    if (nFrames > 0 && m_cFramesWritten >= 2*m_cPeriodSize)
                         nFrames = nFrames > (snd_pcm_sframes_t)m_cPeriodSize ? m_cPeriodSize : nFrames;
 
-                    _add_samples(nFrames, true);
+                    _add_samples(nFrames);
                     m_lastWrite = Clock::now();
-                    ALSA::delay(m_pPcm, &nDelay);
+                    nDelay = _get_buffered_frames();
 
 #ifndef NDEBUG
-                    Duration ms(std::chrono::duration_cast<Duration>(Clock::now() - m_lastWrite));
-                    m_pLog->debug("Time since last write: %d ms; delay: %d; state: %d",
+                    MilliSeconds ms(std::chrono::duration_cast<MilliSeconds>(Clock::now() - m_lastWrite));
+                    m_pLog->debug("Time since last write: %d ms; buffered frames: %d; state: %d",
                             ms.count(), nDelay, snd_pcm_state(m_pPcm));
 #endif
 
-                    if (ALSA::state(m_pPcm) == SND_PCM_STATE_PREPARED &&
-                            nDelay >= (snd_pcm_sframes_t)m_cBufferSize/2)
+                    if (ALSA::state(m_pPcm) == SND_PCM_STATE_PREPARED && !m_bPaused
+                            /*nDelay >= (snd_pcm_sframes_t)m_cBufferSize/2*/)
                     {
                         m_pLog->info("Startng playback (delay: %d)", nDelay);
                         ALSA::start(m_pPcm);
+                        m_bStarted = true;
+                        m_bPaused = false;
+                        bPrevPaused = false;
                     }
                 } catch (ALSA::Error &e) {
                     m_pLog->warning(e.what());
 
                     if (e.get_error() == -EPIPE) {
-                        Duration ms(std::chrono::duration_cast<Duration>(Clock::now() - m_lastWrite));
+                        MilliSeconds ms(std::chrono::duration_cast<MilliSeconds>(Clock::now() - m_lastWrite));
                         m_pLog->warning("XRUN: %d ms since last write", ms.count());
                     } else if (e.get_error() == -EIO) {
                         // Cannot recover from EIO: someone tells us device was unplugged.
@@ -389,117 +440,208 @@ void Player::Impl::run() {
     });
 }
 
-void Player::Impl::_add_samples(size_t _cSamples, bool _bStopWhenEmpty) {
-    const size_t cEnd = m_cPosition + _cSamples;
+bool Player::Impl::_handle_command(lansink::Packet_Kind _kind, Samples *_pPacket) {
+    switch (_kind) {
+        case lansink::Packet_Kind_PAUSE:
+            if (!m_bPaused) {
+                m_elapsed += Clock::now() - m_startTime;
+                m_startTime = TimePoint();
+            }
 
-    assert(m_cFrameBytes > 0);
+            m_bPaused = true;
+            break;
 
-    // Handle control packets.
-    for (auto iSamples = m_queue.begin(); m_cCommandPackets > 0 && iSamples != m_queue.end();) {
+        case lansink::Packet_Kind_START:
+            if (m_bPaused)
+                m_startTime = Clock::now();
+
+            m_bPaused = false;
+            break;
+
+        case lansink::Packet_Kind_STOP:
+            m_bClosed = true;
+            break;
+
+        default:
+            throw LogicError("Unexpected packet kind %d", _kind);
+            return false;
+            break;
+    }
+
+    return true;
+}
+
+void Player::Impl::_handle_commands() {
+    for (auto iSamples = m_queue.begin(); iSamples != m_queue.end();) {
         Samples *pSamples = *iSamples;
 
         if (pSamples->kind == lansink::Packet_Kind_DATA) {
+            if (pSamples->bRunning == m_bPaused)
+                _handle_command(pSamples->bRunning ? lansink::Packet_Kind_START :
+                        lansink::Packet_Kind_PAUSE, pSamples);
+
             ++iSamples;
             continue;
         }
 
-        switch (pSamples->kind) {
-            case lansink::Packet_Kind_PAUSE:
-                m_bPaused = true;
-                --m_cCommandPackets;
-                break;
-            case lansink::Packet_Kind_UNPAUSE:
-                m_bPaused = false;
-                --m_cCommandPackets;
-                break;
-            case lansink::Packet_Kind_STOP:
-                m_bClosed = true;
-                --m_cCommandPackets;
+        if (_handle_command(pSamples->kind, pSamples))
+            if (pSamples->kind == lansink::Packet_Kind_STOP)
                 return;
-            default:
-                throw LogicError("Unexpected packet kind %d", pSamples->kind);
-                break;
-        }
 
         iSamples = m_queue.erase(iSamples);
     }
 
-    if (m_bPaused)
-        return;
+    m_bProcessCommands = false;
+}
 
-    // TODO update m_cPosition while waiting after XRUN.
-    while (m_cPosition < cEnd) {
-        Samples *pSamples = m_queue.empty() ? nullptr : *m_queue.begin();
-        size_t cNext = cEnd;
+void Player::Impl::_add_silence(size_t _cFrames) {
+    size_t cPosition = 0;
 
-        if (pSamples) {
-            cNext = pSamples->cTimestamp + pSamples->cOffset;
-            m_queue.erase(m_queue.begin());
-        }
+    if (_cFrames > 0)
+        m_pLog->debug("Inserting silence: %d frames", _cFrames);
 
-        if (m_cPosition < cNext)
-            m_pLog->debug("Inserting silence: %d, %d", m_cPosition, cNext - m_cPosition);
-
-        // Insert silence instead of missing samples.
+    while (cPosition < _cFrames)
         try {
-            while (m_cPosition < cNext) {
-                const size_t cSilenceFrames = cEnd - m_cPosition;
-                const size_t cSilenceBytes = cSilenceFrames*m_cFrameBytes;
-                std::unique_ptr<char []> pBuf = std::unique_ptr<char []>(new char[cSilenceBytes]);
+            const size_t cSilenceFrames = _cFrames - cPosition;
+            const size_t cSilenceBytes = cSilenceFrames*m_cFrameBytes;
+            assert(cSilenceBytes < 1024*1024*100);
+            std::unique_ptr<char []> pBuf = std::unique_ptr<char []>(new char[cSilenceBytes]);
 
-                memset(pBuf.get(), 0, cSilenceBytes);
-
-                const int nWritten = ALSA::writei(m_pPcm, pBuf.get(), cSilenceFrames);
-
-                m_cPosition += nWritten;
-
-                if (m_cPosition >= cEnd)
-                    break;
-            }
+            memset(pBuf.get(), 0, cSilenceBytes);
+            cPosition += ALSA::writei(m_pPcm, pBuf.get(), cSilenceFrames);
         } catch (ALSA::Error &e) {
            if (e.get_error() == -EPIPE) {
-               Duration ms(std::chrono::duration_cast<Duration>(Clock::now() - m_lastWrite));
+               MilliSeconds ms(std::chrono::duration_cast<MilliSeconds>(Clock::now() - m_lastWrite));
                m_pLog->warning("XRUN: writei(), %d ms since last write", ms.count());
                ALSA::prepare(m_pPcm);
-               m_cPosition = cNext;
+           } else
+               throw;
+        }
+}
+
+snd_pcm_sframes_t Player::Impl::_get_buffered_frames() {
+    snd_pcm_sframes_t nDelay;
+    const snd_pcm_state_t state = ALSA::state(m_pPcm);
+
+    if (state == SND_PCM_STATE_PREPARED || state == SND_PCM_STATE_RUNNING)
+        ALSA::delay(m_pPcm, &nDelay); // TODO use ALSA::avail() instead.
+    else if (state == SND_PCM_STATE_PAUSED)
+        nDelay = m_nBufferedFrames;
+    else
+        nDelay = 0;
+
+    return nDelay;
+}
+
+void Player::Impl::_add_samples(size_t _cFrames) {
+    assert(m_cFrameBytes > 0);
+
+    if (m_bProcessCommands)
+        _handle_commands();
+
+    if (m_queue.empty()) {
+        if (!m_bPaused) {
+            // TODO don't insert more than period size.
+            m_pLog->debug("Avoiding underrun (%d frames max)", _cFrames);
+            _add_silence(_cFrames);
+            m_cFramesWritten += _cFrames;
+        }
+
+        return;
+    }
+
+    Clock::duration position = m_elapsed;
+
+    if (!m_bPaused)
+        position += (Clock::now() - m_startTime);
+
+    const snd_pcm_sframes_t nDelay = _get_buffered_frames();
+    typedef Clock::duration::period Period;
+    snd_pcm_sframes_t nPosition = nDelay + m_nFramesBase +
+            m_cRate*position.count()*Period::num/Period::den;
+
+    // Work around latency introduced by program execution.
+    const snd_pcm_sframes_t c_nThreshold = m_cPeriodSize;
+
+    while (!m_queue.empty() && _cFrames > 0) {
+        Samples *pSamples = *m_queue.begin();
+        const snd_pcm_sframes_t nNext = pSamples->cTimestamp + pSamples->cOffset;
+        const snd_pcm_sframes_t nPacketDelay = nNext - nPosition;
+
+        m_pLog->debug("Processing packet: timestamp = %d, offset = %d, position = %d, "
+                "packet delay = %d, average delay = %.2f", pSamples->cTimestamp,
+                pSamples->cOffset, nPosition, nPacketDelay, m_averageDelay.get());
+
+        if (nNext > nPosition + c_nThreshold) {
+            // Pad with silence.
+            const size_t cFrames = std::min<size_t>(nNext - nPosition, _cFrames);
+
+            m_pLog->debug("Padding till %d (%d frames max)", nNext, _cFrames);
+            _add_silence(cFrames);
+            m_cFramesWritten += cFrames;
+            nPosition += cFrames;
+            _cFrames -= cFrames;
+
+            if (_cFrames == 0)
+                break;
+        } else if (nNext + c_nThreshold < nPosition) {
+            // Shift offset.
+            const size_t cFrames = nPosition - nNext;
+
+            m_pLog->debug("Shifting offset till %d (%d frames max)", nPosition,
+                    pSamples->getFrameCount(m_cFrameBytes));
+
+            if (cFrames >= pSamples->getFrameCount(m_cFrameBytes)) {
+                delete pSamples;
+                m_queue.erase(m_queue.begin());
+                continue;
+            }
+
+            pSamples->cOffset += cFrames;
+        }
+
+        m_queue.erase(m_queue.begin());
+
+        if (!m_bPaused) {
+            m_averageDelay.add(nPacketDelay);
+
+            if (m_averageDelay.is_full() &&
+                    std::abs(m_averageDelay.get()) > c_nBaseFramesAdjustmentThreshold)
+            {
+                const snd_pcm_sframes_t nAdjustment = m_averageDelay.get();
+                m_pLog->debug("Adjusting base frame count: %d", nAdjustment);
+                m_nFramesBase += nAdjustment;
+                nPosition += nAdjustment;
+                m_averageDelay.clear();
+            }
+        }
+
+        const size_t cWriteSize = std::min(_cFrames, pSamples->getFrameCount(m_cFrameBytes));
+
+        m_pLog->debug("Inserting audio: %d, %d (%d)",
+                pSamples->cTimestamp + pSamples->cOffset, cWriteSize, nPosition);
+
+        try {
+            const size_t cWritten = ALSA::writei(m_pPcm,
+                    pSamples->getData(m_cFrameBytes), cWriteSize);
+
+            pSamples->cOffset += cWritten;
+            m_cFramesWritten += cWritten;
+            _cFrames -= cWritten;
+            nPosition += cWritten;
+        } catch (ALSA::Error &e) {
+           if (e.get_error() == -EPIPE) {
+               MilliSeconds ms(std::chrono::duration_cast<MilliSeconds>(Clock::now() - m_lastWrite));
+               m_pLog->warning("XRUN: writei(), %d ms since last write", ms.count());
+               ALSA::prepare(m_pPcm);
            } else
                throw;
         }
 
-        if (!pSamples)
-            break;
-
-        // Fill up buffer.
-        const size_t cFramesQueued = pSamples->data.size()/m_cFrameBytes - pSamples->cOffset;
-        const size_t cFramesRequested = cEnd - m_cPosition;
-
-        if (const size_t cWriteSize = std::min(cFramesRequested, cFramesQueued)) {
-            m_pLog->debug("Inserting audio: %d, %d (%d)",
-                    pSamples->cTimestamp + pSamples->cOffset, cWriteSize, m_cPosition);
-
-            try {
-                const size_t cFramesWritten = ALSA::writei(m_pPcm,
-                        pSamples->getData(m_cFrameBytes), cWriteSize);
-
-                pSamples->cOffset += cFramesWritten;
-                m_cPosition += cFramesWritten;
-            } catch (ALSA::Error &e) {
-               if (e.get_error() == -EPIPE) {
-                   Duration ms(std::chrono::duration_cast<Duration>(Clock::now() - m_lastWrite));
-                   m_pLog->warning("XRUN: writei(), %d ms since last write", ms.count());
-                   ALSA::prepare(m_pPcm);
-               } else
-                   throw;
-            }
-        }
-
-        if (pSamples->cOffset*m_cFrameBytes < pSamples->data.size())
+        if (pSamples->getFrameCount(m_cFrameBytes) > 0)
             m_queue.insert(pSamples);
         else
             delete pSamples;
-
-        if (m_queue.empty() && _bStopWhenEmpty)
-            break;
     }
 }
 

@@ -110,7 +110,7 @@ private:
     void _send_packet(const lansink::Packet &_packet);
     void _send_data();
     void _send_pause();
-    void _send_unpause();
+    void _send_start();
     void _send_stop();
     snd_pcm_sframes_t _get_delay() const;
 };
@@ -153,7 +153,6 @@ void Sender::Impl::start() {
     _reset(false);
     m_status = Sender::usRunning;
     m_startTime = Clock::now();
-    m_worker = std::thread(_make_worker());
 }
 
 void Sender::Impl::stop() {
@@ -235,6 +234,8 @@ void Sender::Impl::prepare() {
     std::unique_ptr<char[]> pBuffer(new char[m_pPlug->get_buffer_size()*get_bytes_per_frame()]);
     m_pBuffer = std::move(pBuffer);
     m_bPrepared = true;
+    m_status = Sender::usPaused;
+    m_worker = std::thread(_make_worker());
 }
 
 void Sender::Impl::drain() {
@@ -353,15 +354,18 @@ std::function<void(void)> Sender::Impl::_make_worker() {
         if (!m_nSockWorker)
             return;
 
-        Status prev = Sender::usRunning;
+        Status prev = m_status;
         const int nSendThresholdFrames = (m_pPlug->nMTU - 100)/get_bytes_per_frame();
 
         while (m_status & Sender::usRunning) {
             try {
-                if (prev == Sender::usRunning && m_status == Sender::usPaused)
+                if (prev == Sender::usRunning &&
+                        (m_status == Sender::usPaused || m_status == Sender::usUnderrun))
                     _send_pause();
-                else if (prev == Sender::usPaused && m_status == Sender::usRunning)
-                    _send_unpause();
+                else if ((prev == Sender::usPaused || prev == Sender::usUnderrun)
+                        && m_status == Sender::usRunning)
+                    // FIXME START is sent right before STOP (mplayer).
+                    _send_start();
 
                 std::lock_guard<std::mutex> lock(m_mutex);
 
@@ -373,6 +377,7 @@ std::function<void(void)> Sender::Impl::_make_worker() {
                 } else if (m_bPrepared && m_status == Sender::usStopping && _estimate_frames() >= m_nPointer) {
                     _send_stop();
                     m_status = Sender::usStopped;
+                    // FIXME mplayer not stopping stream gracefully.
                 }
 
                 if (_get_delay() < (snd_pcm_sframes_t)m_pPlug->get_buffer_size()) {
@@ -401,6 +406,7 @@ void Sender::Impl::_prepare_packet(lansink::Packet &_packet, lansink::Packet_Kin
     _packet.set_version(1);
     _packet.set_stream(m_cStreamId);
     _packet.set_kind(_kind);
+    _packet.set_running(m_status == Sender::usRunning);
     _packet.set_channels(m_cChannels);
     _packet.set_rate(m_pPlug->get_rate());
     _packet.set_format(m_strFormat);
@@ -429,9 +435,9 @@ void Sender::Impl::_send_pause() {
     _send_packet(packet);
 }
 
-void Sender::Impl::_send_unpause() {
+void Sender::Impl::_send_start() {
     lansink::Packet packet;
-    _prepare_packet(packet, lansink::Packet_Kind_UNPAUSE, m_nLastFrames);
+    _prepare_packet(packet, lansink::Packet_Kind_START, m_nLastFrames);
     _send_packet(packet);
 }
 
