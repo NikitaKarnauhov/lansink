@@ -281,7 +281,7 @@ snd_pcm_sframes_t Sender::Impl::_get_delay() const {
             snd_pcm_sframes_t(m_pPlug->appl_ptr) - nEstimated);
 
     if (nDelay > (snd_pcm_sframes_t)m_pPlug->get_buffer_size())
-        m_pPlug->log.warning("nDelay > get_buffer_size() (%d > %d)",
+        m_pPlug->log.warning("nDelay > get_buffer_size() (%ld > %lu)",
                 nDelay, m_pPlug->get_buffer_size());
 
     if ((m_status & Sender::usRunning) && nDelay == 0) {

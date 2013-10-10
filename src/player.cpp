@@ -393,7 +393,7 @@ void Player::Impl::run() {
 
                     snd_pcm_sframes_t nFrames = ALSA::avail_update(m_pPcm);
 
-                    m_pLog->debug("%d frames can be written", nFrames);
+                    m_pLog->debug("%ld frames can be written", nFrames);
 
                     // Otherwise fill up initial portion.
                     if (nFrames > 0 && m_cFramesWritten >= 2*m_cPeriodSize)
@@ -405,14 +405,14 @@ void Player::Impl::run() {
 
 #ifndef NDEBUG
                     MilliSeconds ms(std::chrono::duration_cast<MilliSeconds>(Clock::now() - m_lastWrite));
-                    m_pLog->debug("Time since last write: %d ms; buffered frames: %d; state: %d",
+                    m_pLog->debug("Time since last write: %d ms; buffered frames: %ld; state: %d",
                             ms.count(), nDelay, snd_pcm_state(m_pPcm));
 #endif
 
                     if (ALSA::state(m_pPcm) == SND_PCM_STATE_PREPARED && !m_bPaused
                             /*nDelay >= (snd_pcm_sframes_t)m_cBufferSize/2*/)
                     {
-                        m_pLog->info("Startng playback (delay: %d)", nDelay);
+                        m_pLog->info("Startng playback (delay: %ld)", nDelay);
                         ALSA::start(m_pPcm);
                         m_bStarted = true;
                         m_bPaused = false;
@@ -498,7 +498,7 @@ void Player::Impl::_add_silence(size_t _cFrames) {
     size_t cPosition = 0;
 
     if (_cFrames > 0)
-        m_pLog->debug("Inserting silence: %d frames", _cFrames);
+        m_pLog->debug("Inserting silence: %lu frames", _cFrames);
 
     while (cPosition < _cFrames)
         try {
@@ -542,7 +542,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
     if (m_queue.empty()) {
         if (!m_bPaused) {
             // TODO don't insert more than period size.
-            m_pLog->debug("Avoiding underrun (%d frames max)", _cFrames);
+            m_pLog->debug("Avoiding underrun (%lu frames max)", _cFrames);
             _add_silence(_cFrames);
             m_cFramesWritten += _cFrames;
         }
@@ -568,15 +568,15 @@ void Player::Impl::_add_samples(size_t _cFrames) {
         const snd_pcm_sframes_t nNext = pSamples->cTimestamp + pSamples->cOffset;
         const snd_pcm_sframes_t nPacketDelay = nNext - nPosition;
 
-        m_pLog->debug("Processing packet: timestamp = %d, offset = %d, position = %d, "
-                "packet delay = %d, average delay = %.2f", pSamples->cTimestamp,
+        m_pLog->debug("Processing packet: timestamp = %d, offset = %lu, position = %ld, "
+                "packet delay = %ld, average delay = %.2f", pSamples->cTimestamp,
                 pSamples->cOffset, nPosition, nPacketDelay, m_averageDelay.get());
 
         if (nNext > nPosition + c_nThreshold) {
             // Pad with silence.
             const size_t cFrames = std::min<size_t>(nNext - nPosition, _cFrames);
 
-            m_pLog->debug("Padding till %d (%d frames max)", nNext, _cFrames);
+            m_pLog->debug("Padding till %ld (%lu frames max)", nNext, _cFrames);
             _add_silence(cFrames);
             m_cFramesWritten += cFrames;
             nPosition += cFrames;
@@ -588,7 +588,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
             // Shift offset.
             const size_t cFrames = nPosition - nNext;
 
-            m_pLog->debug("Shifting offset till %d (%d frames max)", nPosition,
+            m_pLog->debug("Shifting offset till %ld (%lu frames max)", nPosition,
                     pSamples->getFrameCount(m_cFrameBytes));
 
             if (cFrames >= pSamples->getFrameCount(m_cFrameBytes)) {
@@ -609,7 +609,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
                     std::abs(m_averageDelay.get()) > c_nBaseFramesAdjustmentThreshold)
             {
                 const snd_pcm_sframes_t nAdjustment = m_averageDelay.get();
-                m_pLog->debug("Adjusting base frame count: %d", nAdjustment);
+                m_pLog->debug("Adjusting base frame count: %ld", nAdjustment);
                 m_nFramesBase += nAdjustment;
                 nPosition += nAdjustment;
                 m_averageDelay.clear();
@@ -618,7 +618,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
 
         const size_t cWriteSize = std::min(_cFrames, pSamples->getFrameCount(m_cFrameBytes));
 
-        m_pLog->debug("Inserting audio: %d, %d (%d)",
+        m_pLog->debug("Inserting audio: %lu, %lu (%ld)",
                 pSamples->cTimestamp + pSamples->cOffset, cWriteSize, nPosition);
 
         try {

@@ -192,7 +192,7 @@ int lansink_poll_revents(snd_pcm_ioplug_t *_pPlug, struct pollfd *_pFD, unsigned
         if (_pFD[0].revents & POLLIN) {
             read(_pFD[0].fd, buf, 1);
             *_pREvents |= POLLOUT;
-            pPlug->log.debug("get_delay() = %d, get_buffer_size() = %d",
+            pPlug->log.debug("get_delay() = %ld, get_buffer_size() = %lu",
                     pPlug->get_delay(), pPlug->get_buffer_size());
         }
 
@@ -210,7 +210,7 @@ int lansink_delay(snd_pcm_ioplug_t *_pPlug, snd_pcm_sframes_t *_pnDelay) {
 
     try {
         *_pnDelay = pPlug->get_delay();
-        pPlug->log.debug("%s() = %d; *_pnDelay = %d", __FUNCTION__, 0, *_pnDelay);
+        pPlug->log.debug("%s() = %d; *_pnDelay = %ld", __FUNCTION__, 0, *_pnDelay);
     } catch (std::exception &e) {
         pPlug->log.error(e.what());
     }
