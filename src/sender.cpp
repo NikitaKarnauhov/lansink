@@ -156,11 +156,15 @@ void Sender::Impl::start() {
 }
 
 void Sender::Impl::stop() {
-    // FIXME race condition.
-    if (m_status & Sender::usRunning)
-        _send_stop();
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
 
-    m_status = Sender::usStopped;
+        if (m_status & Sender::usRunning)
+            _send_stop();
+
+        // FIXME status gets overwritten somewhere.
+        m_status = Sender::usStopped;
+    }
 
     if (m_worker.joinable())
         m_worker.join();
@@ -239,9 +243,12 @@ void Sender::Impl::prepare() {
 }
 
 void Sender::Impl::drain() {
-    // FIXME race condition.
-    assert(m_bPrepared);
-    m_status = Sender::usStopping;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+
+        assert(m_bPrepared);
+        m_status = Sender::usStopping;
+    }
 
     if (m_worker.joinable())
         m_worker.join();
@@ -354,47 +361,51 @@ std::function<void(void)> Sender::Impl::_make_worker() {
         if (!m_nSockWorker)
             return;
 
+        m_pPlug->log.info("Starting sender thread");
+
         Status prev = m_status;
         const int nSendThresholdFrames = (m_pPlug->nMTU - 100)/get_bytes_per_frame();
 
         while (m_status & Sender::usRunning) {
-            try {
-                if (prev == Sender::usRunning &&
-                        (m_status == Sender::usPaused || m_status == Sender::usUnderrun))
-                    _send_pause();
-                else if ((prev == Sender::usPaused || prev == Sender::usUnderrun)
-                        && m_status == Sender::usRunning)
-                    // FIXME START is sent right before STOP (mplayer).
-                    _send_start();
-
+            {
                 std::lock_guard<std::mutex> lock(m_mutex);
 
-                if (!m_queue.empty()) {
-                    while (!m_queue.empty() && (
-                            m_status != Sender::usRunning ||
-                            m_nFramesQueued >= nSendThresholdFrames))
-                        _send_data();
-                } else if (m_bPrepared && m_status == Sender::usStopping && _estimate_frames() >= m_nPointer) {
-                    _send_stop();
-                    m_status = Sender::usStopped;
-                    // FIXME mplayer not stopping stream gracefully.
+                try {
+                    if (prev == Sender::usRunning &&
+                            (m_status == Sender::usPaused || m_status == Sender::usUnderrun))
+                        _send_pause();
+                    else if ((prev == Sender::usPaused || prev == Sender::usUnderrun)
+                            && m_status == Sender::usRunning)
+                        // FIXME START is sent right before STOP (mplayer).
+                        _send_start();
+
+                    if (!m_queue.empty()) {
+                        while (!m_queue.empty() && (
+                                m_status != Sender::usRunning ||
+                                m_nFramesQueued >= nSendThresholdFrames))
+                            _send_data();
+                    } else if (m_bPrepared && m_status == Sender::usStopping && _estimate_frames() >= m_nPointer) {
+                        _send_stop();
+                        m_status = Sender::usStopped;
+                        continue;
+                    }
+
+                    if (_get_delay() < (snd_pcm_sframes_t)m_pPlug->get_buffer_size()) {
+                        // Don't wake up the other party unless there is buffer space available.
+                        char buf[1] = {0};
+                        write(m_nSockWorker, buf, 1);
+                    } else if (m_status == Sender::usUnderrun) {
+                        // Resume if buffer filled up after underrun.
+                        m_pPlug->log.info("Resuming after XRUN");
+                        m_status = Sender::usRunning;
+                        m_startTime = Clock::now();
+                    }
+                } catch (std::exception &e) {
+                    m_pPlug->log.error(e.what());
                 }
 
-                if (_get_delay() < (snd_pcm_sframes_t)m_pPlug->get_buffer_size()) {
-                    // Don't wake up the other party unless there is buffer space available.
-                    char buf[1] = {0};
-                    write(m_nSockWorker, buf, 1);
-                } else if (m_status == Sender::usUnderrun) {
-                    // Resume if buffer filled up after underrun.
-                    m_pPlug->log.info("Resuming after XRUN");
-                    m_status = Sender::usRunning;
-                    m_startTime = Clock::now();
-                }
-            } catch (std::exception &e) {
-                m_pPlug->log.error(e.what());
+                prev = m_status;
             }
-
-            prev = m_status;
             std::this_thread::sleep_for(std::chrono::milliseconds(m_pPlug->nSendPeriod));
         }
     };
