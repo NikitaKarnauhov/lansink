@@ -346,6 +346,10 @@ snd_pcm_sframes_t Sender::Impl::_estimate_frames() const {
             m_status == Sender::usUnderrun)
         return m_nLastFrames;
 
+    // Wasn't started.
+    if (m_startTime == TimePoint())
+        return m_nLastFrames;
+
     Duration ms(std::chrono::duration_cast<Duration>(Clock::now() - m_startTime));
 
     return m_nLastFrames + ms.count()*(m_pPlug->get_rate()/1000.0);
