@@ -153,6 +153,9 @@ void Sender::Impl::start() {
     _reset(false);
     m_status = Sender::usRunning;
     m_startTime = Clock::now();
+
+    if (!m_worker.joinable())
+        m_worker = std::thread(_make_worker());
 }
 
 void Sender::Impl::stop() {
@@ -203,6 +206,9 @@ snd_pcm_sframes_t Sender::Impl::transfer(const char *_pData, size_t _cOffset, si
     m_queue.emplace_back(pSrc, pSrc + cSizeBytes);
     m_nFramesQueued += _cSize;
 
+    if (!m_worker.joinable())
+        m_worker = std::thread(_make_worker());
+
     return _cSize;
 }
 
@@ -239,7 +245,6 @@ void Sender::Impl::prepare() {
     m_pBuffer = std::move(pBuffer);
     m_bPrepared = true;
     m_status = Sender::usPaused;
-    m_worker = std::thread(_make_worker());
 }
 
 void Sender::Impl::drain() {
@@ -263,6 +268,9 @@ void Sender::Impl::pause() {
     m_nLastFrames = _estimate_frames();
     m_status = Sender::usPaused;
     m_startTime = TimePoint();
+
+    if (!m_worker.joinable())
+        m_worker = std::thread(_make_worker());
 }
 
 void Sender::Impl::unpause() {
@@ -270,6 +278,9 @@ void Sender::Impl::unpause() {
 
     m_status = Sender::usRunning;
     m_startTime = Clock::now();
+
+    if (!m_worker.joinable())
+        m_worker = std::thread(_make_worker());
 }
 
 snd_pcm_sframes_t Sender::Impl::_get_delay() const {
