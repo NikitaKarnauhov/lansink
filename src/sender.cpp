@@ -51,6 +51,7 @@
 #include <chrono>
 #include <list>
 #include <mutex>
+#include <atomic>
 #include <random>
 
 class Sender::Impl {
@@ -100,9 +101,12 @@ private:
     static unsigned int s_cSeed;
     static std::default_random_engine s_randomEngine;
     uint64_t m_cStreamId;
+    std::atomic_bool m_bStarted;
 
     void _reset(bool _bResetStreamParams);
     std::function<void(void)> _make_worker();
+    void _start_worker();
+    void _stop_worker();
     void _init_descriptors();
     snd_pcm_sframes_t _estimate_frames() const;
     snd_pcm_sframes_t _get_frames_required() const;
@@ -121,7 +125,7 @@ std::default_random_engine Sender::Impl::s_randomEngine = std::default_random_en
 Sender::Impl::Impl(Sender *_pPlug) :
     m_pPlug(_pPlug), m_strFormat(""), m_cBitsPerSample(0), m_cChannels(0),
     m_nSockWorker(0), m_status(Sender::usStopped), m_nSocket(-1),
-    m_cStreamId(0)
+    m_cStreamId(0), m_bStarted(false)
 {
     if (s_cSeed == 0) {
         try {
@@ -153,9 +157,10 @@ void Sender::Impl::start() {
     _reset(false);
     m_status = Sender::usRunning;
     m_startTime = Clock::now();
+    _start_worker();
 
-    if (!m_worker.joinable())
-        m_worker = std::thread(_make_worker());
+    // Sleep a bit since returning pointer() = 0 right after start somehow confuses the user.
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
 }
 
 void Sender::Impl::stop() {
@@ -169,8 +174,7 @@ void Sender::Impl::stop() {
         m_status = Sender::usStopped;
     }
 
-    if (m_worker.joinable())
-        m_worker.join();
+    _stop_worker();
 }
 
 snd_pcm_sframes_t Sender::Impl::get_buffer_pointer() const {
@@ -205,9 +209,7 @@ snd_pcm_sframes_t Sender::Impl::transfer(const char *_pData, size_t _cOffset, si
     m_lastFrameTime = Clock::now();
     m_queue.emplace_back(pSrc, pSrc + cSizeBytes);
     m_nFramesQueued += _cSize;
-
-    if (!m_worker.joinable())
-        m_worker = std::thread(_make_worker());
+    _start_worker();
 
     return _cSize;
 }
@@ -217,10 +219,7 @@ void Sender::Impl::prepare() {
     // Stop thread first.
     if (m_status & Sender::usRunning) {
         m_status = Sender::usStopping;
-
-        if (m_worker.joinable())
-            m_worker.join();
-
+        _stop_worker();
         m_status = Sender::usStopped;
     }
 
@@ -245,6 +244,7 @@ void Sender::Impl::prepare() {
     m_pBuffer = std::move(pBuffer);
     m_bPrepared = true;
     m_status = Sender::usPaused;
+    m_bStarted = false;
 }
 
 void Sender::Impl::drain() {
@@ -255,9 +255,7 @@ void Sender::Impl::drain() {
         m_status = Sender::usStopping;
     }
 
-    if (m_worker.joinable())
-        m_worker.join();
-
+    _stop_worker();
     m_status = Sender::usStopped;
 }
 
@@ -268,9 +266,7 @@ void Sender::Impl::pause() {
     m_nLastFrames = _estimate_frames();
     m_status = Sender::usPaused;
     m_startTime = TimePoint();
-
-    if (!m_worker.joinable())
-        m_worker = std::thread(_make_worker());
+    _start_worker();
 }
 
 void Sender::Impl::unpause() {
@@ -278,9 +274,7 @@ void Sender::Impl::unpause() {
 
     m_status = Sender::usRunning;
     m_startTime = Clock::now();
-
-    if (!m_worker.joinable())
-        m_worker = std::thread(_make_worker());
+    _start_worker();
 }
 
 snd_pcm_sframes_t Sender::Impl::_get_delay() const {
@@ -377,6 +371,7 @@ std::function<void(void)> Sender::Impl::_make_worker() {
             return;
 
         m_pPlug->log.info("Starting sender thread");
+        m_bStarted = true;
 
         Status prev = m_status;
         const int nSendThresholdFrames = (m_pPlug->nMTU - 100)/get_bytes_per_frame();
@@ -421,9 +416,28 @@ std::function<void(void)> Sender::Impl::_make_worker() {
 
                 prev = m_status;
             }
+
             std::this_thread::sleep_for(std::chrono::milliseconds(m_pPlug->nSendPeriod));
         }
     };
+}
+
+void Sender::Impl::_start_worker() {
+    // _start_worker is never called from worker thread, so no mutex.
+    if (!m_bStarted) {
+        m_worker = std::thread(_make_worker());
+
+        // Busy-wait while worker initializes.
+        while (!m_bStarted)
+            std::this_thread::yield();
+    }
+}
+
+void Sender::Impl::_stop_worker() {
+    if (m_worker.joinable()) {
+        m_worker.join();
+        m_bStarted = false;
+    }
 }
 
 void Sender::Impl::_prepare_packet(lansink::Packet &_packet, lansink::Packet_Kind _kind,
