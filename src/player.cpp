@@ -585,7 +585,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
 
     if (m_queue.empty()) {
         if (!m_bPaused) {
-            // TODO don't insert more than period size.
+            _cFrames = std::max<size_t>(m_cPeriodSize, _cFrames);
             m_pLog->warning("Avoiding underrun (%lu frames max)", _cFrames);
             _add_silence(_cFrames);
             m_cFramesWritten += _cFrames;
