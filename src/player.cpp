@@ -326,12 +326,26 @@ void Player::Impl::run() {
                 if (m_bClosed) {
                     std::lock_guard<std::mutex> lock(m_mutex);
 
-                    if (m_nLastError != 0) {
+                    if (m_nLastError != 0 || m_bPaused) {
                         m_pLog->info("Closing stream %llu", m_cStreamId);
                         ALSA::close(m_pPcm);
                     } else {
                         m_pLog->info("Draining stream %llu", m_cStreamId);
-                        ALSA::drain(m_pPcm);
+
+                        // Work around pulse_drain() lock up in PulseAudio output module.
+                        // ALSA::drain(m_pPcm);
+
+                        try {
+                            const snd_pcm_sframes_t nFrames = m_cBufferSize -
+                                    _get_available_frames(true);
+                            const MilliSeconds ms(std::chrono::milliseconds(nFrames*1000/m_cRate));
+
+                            m_pLog->debug("Waiting %llu ms for playback to finish", ms.count());
+                            std::this_thread::sleep_for(ms);
+                        } catch (...) {
+                            // Do nothing.
+                        }
+
                         ALSA::close(m_pPcm);
                         // FIXME preserve unplayed queued packets that possibly are from new connection.
                     }
