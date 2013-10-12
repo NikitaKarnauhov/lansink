@@ -64,12 +64,11 @@ struct Samples {
         return kind > _other.kind;
     }
 
-    // TODO rename
-    const char *getData(size_t _cFrameBytes) const {
+    const char *get_data(size_t _cFrameBytes) const {
         return data.c_str() + cOffset*_cFrameBytes;
     }
 
-    size_t getFrameCount(size_t _cFrameBytes) const {
+    size_t get_frame_count(size_t _cFrameBytes) const {
         return data.size()/_cFrameBytes - cOffset;
     }
 };
@@ -635,9 +634,9 @@ void Player::Impl::_add_samples(size_t _cFrames) {
             const size_t cFrames = nPosition - nNext;
 
             m_pLog->warning("Shifting offset till %ld (%lu frames max)", nPosition,
-                    pSamples->getFrameCount(m_cFrameBytes));
+                    pSamples->get_frame_count(m_cFrameBytes));
 
-            if (cFrames >= pSamples->getFrameCount(m_cFrameBytes)) {
+            if (cFrames >= pSamples->get_frame_count(m_cFrameBytes)) {
                 delete pSamples;
                 m_queue.erase(m_queue.begin());
                 continue;
@@ -662,14 +661,14 @@ void Player::Impl::_add_samples(size_t _cFrames) {
             }
         }
 
-        const size_t cWriteSize = std::min(_cFrames, pSamples->getFrameCount(m_cFrameBytes));
+        const size_t cWriteSize = std::min(_cFrames, pSamples->get_frame_count(m_cFrameBytes));
 
         m_pLog->debug("Inserting audio: %lu, %lu (%ld)",
                 pSamples->cTimestamp + pSamples->cOffset, cWriteSize, nPosition);
 
         try {
             const size_t cWritten = ALSA::writei(m_pPcm,
-                    pSamples->getData(m_cFrameBytes), cWriteSize);
+                    pSamples->get_data(m_cFrameBytes), cWriteSize);
 
             pSamples->cOffset += cWritten;
             m_cFramesWritten += cWritten;
@@ -685,7 +684,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
                throw;
         }
 
-        if (pSamples->getFrameCount(m_cFrameBytes) > 0)
+        if (pSamples->get_frame_count(m_cFrameBytes) > 0)
             m_queue.insert(pSamples);
         else
             delete pSamples;
