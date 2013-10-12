@@ -362,6 +362,7 @@ void Player::Impl::run() {
 
                     ALSA::recover(m_pPcm, m_nLastError, true);
                     m_nLastError = 0;
+                    m_nBufferedFrames = 0;
 
                     continue;
                 }
@@ -522,7 +523,16 @@ snd_pcm_sframes_t Player::Impl::_get_buffered_frames() {
     const snd_pcm_state_t state = ALSA::state(m_pPcm);
 
     if (state == SND_PCM_STATE_PREPARED || state == SND_PCM_STATE_RUNNING)
-        ALSA::delay(m_pPcm, &nDelay); // TODO use ALSA::avail() instead.
+        try {
+            ALSA::delay(m_pPcm, &nDelay);
+            m_nBufferedFrames = nDelay;
+        } catch (ALSA::Error &e) {
+            if (e.get_error() == -EIO) {
+                m_pLog->warning(e.what());
+                nDelay = m_nBufferedFrames;
+            } else
+                throw;
+        }
     else if (state == SND_PCM_STATE_PAUSED)
         nDelay = m_nBufferedFrames;
     else
@@ -543,6 +553,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
             m_pLog->debug("Avoiding underrun (%lu frames max)", _cFrames);
             _add_silence(_cFrames);
             m_cFramesWritten += _cFrames;
+            m_nBufferedFrames += _cFrames;
         }
 
         return;
@@ -577,6 +588,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
             m_pLog->debug("Padding till %ld (%lu frames max)", nNext, _cFrames);
             _add_silence(cFrames);
             m_cFramesWritten += cFrames;
+            m_nBufferedFrames += _cFrames;
             nPosition += cFrames;
             _cFrames -= cFrames;
 
@@ -625,6 +637,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
 
             pSamples->cOffset += cWritten;
             m_cFramesWritten += cWritten;
+            m_nBufferedFrames += _cFrames;
             _cFrames -= cWritten;
             nPosition += cWritten;
         } catch (ALSA::Error &e) {
