@@ -161,7 +161,7 @@ private:
     bool _handle_command(lansink::Packet_Kind _kind, Samples *_pPacket);
     const Samples *_find_first_data_packet() const;
     snd_pcm_sframes_t _get_buffered_frames();
-    snd_pcm_sframes_t _get_available_frames(bool _bUpdate);
+    snd_pcm_sframes_t _get_available_frames(bool _bSync);
 };
 
 Player *Player::Impl::get(lansink::Packet &_packet, Log &_log) {
@@ -574,19 +574,25 @@ snd_pcm_sframes_t Player::Impl::_get_buffered_frames() {
     return nDelay;
 }
 
-snd_pcm_sframes_t Player::Impl::_get_available_frames(bool _bUpdate) {
+snd_pcm_sframes_t Player::Impl::_get_available_frames(bool _bSync) {
     snd_pcm_sframes_t nFrames;
+    const snd_pcm_state_t state = ALSA::state(m_pPcm);
 
-    try {
-        nFrames = _bUpdate ? ALSA::avail_update(m_pPcm) : ALSA::avail(m_pPcm);
-        m_nBufferedFrames = m_cBufferSize - nFrames;
-    } catch (ALSA::Error &e) {
-        if (e.get_error() == -EIO) {
-            m_pLog->warning(e.what());
-            nFrames = std::max<snd_pcm_sframes_t>(0, m_cBufferSize - m_nBufferedFrames);
-        } else
-            throw;
-    }
+    if (state == SND_PCM_STATE_PREPARED || state == SND_PCM_STATE_RUNNING)
+        try {
+            nFrames = _bSync ? ALSA::avail(m_pPcm) : ALSA::avail_update(m_pPcm);
+            m_nBufferedFrames = m_cBufferSize - nFrames;
+        } catch (ALSA::Error &e) {
+            if (e.get_error() == -EIO) {
+                m_pLog->warning(e.what());
+                nFrames = std::max<snd_pcm_sframes_t>(0, m_cBufferSize - m_nBufferedFrames);
+            } else
+                throw;
+        }
+    else if (state == SND_PCM_STATE_PAUSED)
+        nFrames = std::max<snd_pcm_sframes_t>(0, m_cBufferSize - m_nBufferedFrames);
+    else
+        nFrames = 0;
 
     return nFrames;
 }
