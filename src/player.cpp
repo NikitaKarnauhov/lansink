@@ -370,55 +370,50 @@ void Player::Impl::run() {
                 }
 
                 try {
-                    ALSA::wait(m_pPcm, 1000);
-
                     std::unique_lock<std::mutex> lock(m_mutex);
-                    snd_pcm_sframes_t nDelay;
 
-                    if (m_queue.empty()) {
-                        if (m_bPaused)
-                            nDelay = m_cPeriodSize; // Don't wake up early if we're paused anyway.
-                        else
-                            nDelay = _get_buffered_frames();
+                    if (!m_queue.empty() || !m_bPaused) {
+                        snd_pcm_sframes_t nFrames = ALSA::avail_update(m_pPcm);
 
-                        // Try to wakeup before underrun happens.
-                        constexpr int c_nMarginMS = 5;
-                        MilliSeconds ms(std::chrono::milliseconds(
-                                std::max<int>(0, nDelay*1000/m_cRate - c_nMarginMS)));
+                        m_pLog->debug("%ld frames can be written", nFrames);
 
-                        m_pLog->debug("Queue empty, waiting for data %d ms", ms.count());
-                        m_dataAvailable.wait_for(lock, ms,
-                                [&]() { return !m_queue.empty(); });
-                    }
+                        // Otherwise fill up initial portion.
+                        if (nFrames > 0 && m_cFramesWritten >= 2*m_cPeriodSize)
+                            nFrames = nFrames > (snd_pcm_sframes_t)m_cPeriodSize ? m_cPeriodSize : nFrames;
 
-                    if (m_queue.empty() && m_bPaused)
-                        continue;
-
-                    snd_pcm_sframes_t nFrames = ALSA::avail_update(m_pPcm);
-
-                    m_pLog->debug("%ld frames can be written", nFrames);
-
-                    // Otherwise fill up initial portion.
-                    if (nFrames > 0 && m_cFramesWritten >= 2*m_cPeriodSize)
-                        nFrames = nFrames > (snd_pcm_sframes_t)m_cPeriodSize ? m_cPeriodSize : nFrames;
-
-                    _add_samples(nFrames);
-                    m_lastWrite = Clock::now();
-                    nDelay = _get_buffered_frames();
+                        _add_samples(nFrames);
+                        m_lastWrite = Clock::now();
 
 #ifndef NDEBUG
-                    MilliSeconds ms(std::chrono::duration_cast<MilliSeconds>(Clock::now() - m_lastWrite));
-                    m_pLog->debug("Time since last write: %d ms; buffered frames: %ld; state: %d",
-                            ms.count(), nDelay, snd_pcm_state(m_pPcm));
+                        {
+                            const snd_pcm_sframes_t nDelay = _get_buffered_frames();
+                            MilliSeconds ms(std::chrono::duration_cast<MilliSeconds>(Clock::now() - m_lastWrite));
+                            m_pLog->debug("Time since last write: %d ms; buffered frames: %ld; state: %d",
+                                    ms.count(), nDelay, snd_pcm_state(m_pPcm));
+                        }
 #endif
 
-                    if (ALSA::state(m_pPcm) == SND_PCM_STATE_PREPARED && !m_bPaused) {
-                        m_pLog->info("Starting playback (delay: %ld)", nDelay);
-                        ALSA::start(m_pPcm);
-                        m_bStarted = true;
-                        m_bPaused = false;
-                        bPrevPaused = false;
+                        if (ALSA::state(m_pPcm) == SND_PCM_STATE_PREPARED && !m_bPaused) {
+                            m_pLog->info("Starting playback (delay: %ld)", _get_buffered_frames());
+                            ALSA::start(m_pPcm);
+                            m_bStarted = true;
+                            m_bPaused = false;
+                            bPrevPaused = false;
+                        }
                     }
+
+                    // Don't wake up early if we're paused anyway.
+                    const snd_pcm_sframes_t nDelay = m_bPaused ? m_cPeriodSize :
+                            _get_buffered_frames();
+
+                    // Try to wakeup before underrun happens.
+                    constexpr int c_nMarginMS = 5;
+                    MilliSeconds ms(std::chrono::milliseconds(
+                            std::max<int>(0, nDelay*1000/m_cRate - c_nMarginMS)));
+
+                    m_pLog->debug("Waiting for data %d ms, %u packets queued",
+                            ms.count(), m_queue.size());
+                    m_dataAvailable.wait_for(lock, ms);
                 } catch (ALSA::Error &e) {
                     m_pLog->warning(e.what());
 
