@@ -154,7 +154,6 @@ Sender::Status Sender::Impl::get_status() const {
 void Sender::Impl::start() {
     std::lock_guard<std::mutex> lock(m_mutex);
 
-    _reset(false);
     m_status = Sender::usRunning;
     m_startTime = Clock::now();
     _start_worker();
@@ -465,19 +464,19 @@ void Sender::Impl::_send_packet(const lansink::Packet &_packet) {
 
 void Sender::Impl::_send_stop() {
     lansink::Packet packet;
-    _prepare_packet(packet, lansink::Packet_Kind_STOP, _estimate_frames());
+    _prepare_packet(packet, lansink::Packet_Kind_STOP, m_nPointer);
     _send_packet(packet);
 }
 
 void Sender::Impl::_send_pause() {
     lansink::Packet packet;
-    _prepare_packet(packet, lansink::Packet_Kind_PAUSE, _estimate_frames());
+    _prepare_packet(packet, lansink::Packet_Kind_PAUSE, m_nPointer);
     _send_packet(packet);
 }
 
 void Sender::Impl::_send_start() {
     lansink::Packet packet;
-    _prepare_packet(packet, lansink::Packet_Kind_START, m_nLastFrames);
+    _prepare_packet(packet, lansink::Packet_Kind_START, m_nPointer);
     _send_packet(packet);
 }
 
