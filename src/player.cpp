@@ -586,7 +586,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
     if (m_queue.empty()) {
         if (!m_bPaused) {
             // TODO don't insert more than period size.
-            m_pLog->debug("Avoiding underrun (%lu frames max)", _cFrames);
+            m_pLog->warning("Avoiding underrun (%lu frames max)", _cFrames);
             _add_silence(_cFrames);
             m_cFramesWritten += _cFrames;
             m_nBufferedFrames += _cFrames;
@@ -621,7 +621,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
             // Pad with silence.
             const size_t cFrames = std::min<size_t>(nNext - nPosition, _cFrames);
 
-            m_pLog->debug("Padding till %ld (%lu frames max)", nNext, _cFrames);
+            m_pLog->warning("Padding till %ld (%lu frames max)", nNext, _cFrames);
             _add_silence(cFrames);
             m_cFramesWritten += cFrames;
             m_nBufferedFrames += _cFrames;
@@ -634,7 +634,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
             // Shift offset.
             const size_t cFrames = nPosition - nNext;
 
-            m_pLog->debug("Shifting offset till %ld (%lu frames max)", nPosition,
+            m_pLog->warning("Shifting offset till %ld (%lu frames max)", nPosition,
                     pSamples->getFrameCount(m_cFrameBytes));
 
             if (cFrames >= pSamples->getFrameCount(m_cFrameBytes)) {
@@ -655,7 +655,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
                     std::abs(m_averageDelay.get()) > c_nBaseFramesAdjustmentThreshold)
             {
                 const snd_pcm_sframes_t nAdjustment = m_averageDelay.get();
-                m_pLog->debug("Adjusting base frame count: %ld", nAdjustment);
+                m_pLog->warning("Adjusting base frame count: %ld", nAdjustment);
                 m_nFramesBase += nAdjustment;
                 nPosition += nAdjustment;
                 m_averageDelay.clear();
