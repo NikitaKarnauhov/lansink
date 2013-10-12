@@ -409,9 +409,7 @@ void Player::Impl::run() {
                             ms.count(), nDelay, snd_pcm_state(m_pPcm));
 #endif
 
-                    if (ALSA::state(m_pPcm) == SND_PCM_STATE_PREPARED && !m_bPaused
-                            /*nDelay >= (snd_pcm_sframes_t)m_cBufferSize/2*/)
-                    {
+                    if (ALSA::state(m_pPcm) == SND_PCM_STATE_PREPARED && !m_bPaused) {
                         m_pLog->info("Startng playback (delay: %ld)", nDelay);
                         ALSA::start(m_pPcm);
                         m_bStarted = true;
