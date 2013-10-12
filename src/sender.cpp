@@ -385,7 +385,6 @@ std::function<void(void)> Sender::Impl::_make_worker() {
                         _send_pause();
                     else if ((prev == Sender::usPaused || prev == Sender::usUnderrun)
                             && m_status == Sender::usRunning)
-                        // FIXME START is sent right before STOP (mplayer).
                         _send_start();
 
                     if (!m_queue.empty()) {
