@@ -346,6 +346,7 @@ void Player::Impl::run() {
                             // Do nothing.
                         }
 
+                        m_pLog->info("Closing stream %llu", m_cStreamId);
                         ALSA::close(m_pPcm);
                         // FIXME preserve unplayed queued packets that possibly are from new connection.
                     }
