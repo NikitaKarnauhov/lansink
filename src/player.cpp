@@ -464,6 +464,10 @@ void Player::Impl::run() {
             }
         } catch (std::exception &e) {
             m_pLog->error(e.what());
+            m_pLog->info("Closing stream %llu due to error", m_cStreamId);
+            ALSA::close(m_pPcm);
+            m_pPcm = nullptr;
+            m_bClosed = true;
         }
     });
 }
