@@ -417,18 +417,19 @@ void Player::Impl::run() {
                         }
                     }
 
-                    // Don't wake up early if we're paused anyway.
-                    const snd_pcm_sframes_t nDelay = m_bPaused ? m_cPeriodSize :
-                            m_cBufferSize - _get_available_frames(false);
-
                     // Try to wakeup before underrun happens.
-                    constexpr int c_nMarginMS = 5;
-                    MilliSeconds ms(std::chrono::milliseconds(
-                            std::max<int>(0, nDelay*1000/m_cRate - c_nMarginMS)));
+                    constexpr int c_nMarginMS = 20;
+                    const snd_pcm_sframes_t nMarginFrames = c_nMarginMS*m_cRate/1000;
+
+                    // Don't wake up early if we're paused anyway.
+                    const snd_pcm_sframes_t nAvailableFrames = _get_available_frames(false);
+                    const snd_pcm_sframes_t nDelay = m_bPaused ? m_cPeriodSize :
+                            std::max<int>(0, m_cBufferSize - nAvailableFrames - nMarginFrames);
+                    MilliSeconds ms((int)nDelay*1000/m_cRate);
 
                     if (ms.count() > 0) {
-                        m_pLog->debug("Waiting for data %d ms, %u packets queued",
-                                ms.count(), m_queue.size());
+                        m_pLog->debug("Waiting for data %d ms, %u packets queued, available = %ld, margin = %ld",
+                                ms.count(), m_queue.size(), nAvailableFrames, nMarginFrames);
                         m_dataAvailable.wait_for(lock, ms);
                     } else if (m_queue.empty())
                         std::this_thread::yield();
