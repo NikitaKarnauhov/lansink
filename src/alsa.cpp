@@ -127,6 +127,10 @@ int ALSA::hw_params_set_period_size_near(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *
     return nResult;
 }
 
+bool ALSA::hw_params_can_pause(snd_pcm_hw_params_t *_pParams) {
+    return snd_pcm_hw_params_can_pause(_pParams) == 1;
+}
+
 int ALSA::hw_params(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams) {
     const int nResult = snd_pcm_hw_params(_pPcm, _pParams);
 

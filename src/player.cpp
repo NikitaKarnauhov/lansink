@@ -91,8 +91,9 @@ public:
         m_cStreamId(_cStreamId), m_pPcm(nullptr), m_cBufferSize(2048),
         m_cPeriodSize(512), m_format(SND_PCM_FORMAT_UNKNOWN), m_cRate(0), m_cChannelCount(0),
         m_cFrameBytes(0), m_cFramesWritten(0), m_pLog(&_log), m_bReady(false), m_bPaused(false),
-        m_bClosed(false), m_bStarted(false), m_nLastError(0), m_bProcessCommands(false),
-        m_nBufferedFrames(0), m_averageDelay(c_cBaseFramesAdjustmentPacketCount) {}
+        m_bCanBePaused(false), m_bEmulatedPause(false), m_bClosed(false), m_bStarted(false),
+        m_nLastError(0), m_bProcessCommands(false), m_nBufferedFrames(0),
+        m_averageDelay(c_cBaseFramesAdjustmentPacketCount) {}
 
     ~Impl() {
         if (m_pPcm) {
@@ -133,6 +134,8 @@ private:
     Log *m_pLog;
     bool m_bReady;
     bool m_bPaused;
+    bool m_bCanBePaused;
+    bool m_bEmulatedPause;
     bool m_bClosed;
     bool m_bStarted;
     std::condition_variable m_dataAvailable;
@@ -231,6 +234,7 @@ void Player::Impl::init(lansink::Packet &_packet) {
         ALSA::hw_params_set_buffer_size_near(m_pPcm, pParams, &m_cBufferSize);
         ALSA::hw_params_set_period_size_near(m_pPcm, pParams, &m_cPeriodSize, NULL);
         ALSA::hw_params(m_pPcm, pParams);
+        m_bCanBePaused = ALSA::hw_params_can_pause(pParams);
         ALSA::hw_params_free(pParams);
 
         snd_pcm_sw_params_t *pSWParams;
@@ -253,6 +257,7 @@ void Player::Impl::init(lansink::Packet &_packet) {
         m_elapsed = Clock::duration(0);
         m_startTime = TimePoint();
         m_bPaused = true;
+        m_bEmulatedPause = false;
         m_bStarted = false;
         m_nBufferedFrames = 0;
         m_averageDelay.clear();
@@ -309,19 +314,25 @@ void Player::Impl::run() {
             bool bPrevPaused = m_bPaused;
 
             while (true) {
-                // TODO check if device can be paused.
                 if (m_bStarted && m_bPaused != bPrevPaused) {
                     std::lock_guard<std::mutex> lock(m_mutex);
 
                     m_pLog->info("%s stream %llu", m_bPaused ? "Pausing" : "Unpausing",
                             m_cStreamId);
 
-                    if (m_bPaused)
-                        m_nBufferedFrames = _get_buffered_frames();
-                    else
-                        m_averageDelay.clear();
+                    if (m_bCanBePaused) {
+                        if (m_bPaused)
+                            m_nBufferedFrames = _get_buffered_frames();
+                        else
+                            m_averageDelay.clear();
 
-                    ALSA::pause(m_pPcm, m_bPaused);
+                        ALSA::pause(m_pPcm, m_bPaused);
+                    } else if (m_bPaused) {
+                        m_pLog->warning("Device cannot be paused, emulating pause");
+                        m_bEmulatedPause = true;
+                    } else
+                        m_bEmulatedPause = false;
+
                 }
 
                 if (m_bClosed) {
@@ -581,6 +592,13 @@ void Player::Impl::_add_samples(size_t _cFrames) {
 
     if (m_bProcessCommands)
         _handle_commands();
+
+    if (m_bEmulatedPause) {
+        _cFrames = std::max<size_t>(m_cPeriodSize, _cFrames);
+        _add_silence(_cFrames);
+        m_nBufferedFrames += _cFrames;
+        return;
+    }
 
     if (m_queue.empty()) {
         if (!m_bPaused) {

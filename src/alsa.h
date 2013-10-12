@@ -82,6 +82,7 @@ struct ALSA {
             snd_pcm_uframes_t *_puSize);
     static int hw_params_set_period_size_near(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams,
             snd_pcm_uframes_t *_puSize, int *_pnDir);
+    static bool hw_params_can_pause(snd_pcm_hw_params_t *_pParams);
     static int hw_params(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams);
     static void hw_params_free(snd_pcm_hw_params_t *_pParams);
     static int prepare(snd_pcm_t *_pPcm);
