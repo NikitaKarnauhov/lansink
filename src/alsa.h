@@ -107,6 +107,7 @@ struct ALSA {
     static int sw_params_current(snd_pcm_t *_pPcm, snd_pcm_sw_params_t *_pParams);
     static int sw_params_set_start_threshold(snd_pcm_t *_pPcm,
             snd_pcm_sw_params_t *_pParams, snd_pcm_uframes_t _cVal);
+    static int sw_params_get_boundary(snd_pcm_sw_params_t *_pParams, snd_pcm_uframes_t *_pVal);
     static int sw_params(snd_pcm_t *_pPcm, snd_pcm_sw_params_t *_pParams);
 
     static unsigned int format_physical_width(snd_pcm_format_t _format);

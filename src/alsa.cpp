@@ -288,6 +288,15 @@ int ALSA::sw_params_set_start_threshold(snd_pcm_t *_pPcm,
     return nResult;
 }
 
+int ALSA::sw_params_get_boundary(snd_pcm_sw_params_t *_pParams, snd_pcm_uframes_t *_pVal) {
+    const int nResult = snd_pcm_sw_params_get_boundary(_pParams, _pVal);
+
+    if (nResult < 0)
+        throw Error(nResult, "snd_pcm_sw_params_get_boundary()");
+
+    return nResult;
+}
+
 int ALSA::sw_params(snd_pcm_t *_pPcm, snd_pcm_sw_params_t *_pParams) {
     const int nResult = snd_pcm_sw_params(_pPcm, _pParams);
 

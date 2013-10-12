@@ -234,10 +234,12 @@ void Player::Impl::init(lansink::Packet &_packet) {
         ALSA::hw_params_free(pParams);
 
         snd_pcm_sw_params_t *pSWParams;
+        snd_pcm_uframes_t cBoundary;
 
         snd_pcm_sw_params_alloca(&pSWParams);
         ALSA::sw_params_current(m_pPcm, pSWParams);
-        ALSA::sw_params_set_start_threshold(m_pPcm, pSWParams, m_cBufferSize*2);
+        ALSA::sw_params_get_boundary(pSWParams, &cBoundary);
+        ALSA::sw_params_set_start_threshold(m_pPcm, pSWParams, cBoundary);
         ALSA::sw_params(m_pPcm, pSWParams);
 
         ALSA::prepare(m_pPcm);
