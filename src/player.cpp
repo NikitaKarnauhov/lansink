@@ -412,9 +412,12 @@ void Player::Impl::run() {
                     MilliSeconds ms(std::chrono::milliseconds(
                             std::max<int>(0, nDelay*1000/m_cRate - c_nMarginMS)));
 
-                    m_pLog->debug("Waiting for data %d ms, %u packets queued",
-                            ms.count(), m_queue.size());
-                    m_dataAvailable.wait_for(lock, ms);
+                    if (ms.count() > 0) {
+                        m_pLog->debug("Waiting for data %d ms, %u packets queued",
+                                ms.count(), m_queue.size());
+                        m_dataAvailable.wait_for(lock, ms);
+                    } else if (m_queue.empty())
+                        std::this_thread::yield();
                 } catch (ALSA::Error &e) {
                     m_pLog->warning(e.what());
 
