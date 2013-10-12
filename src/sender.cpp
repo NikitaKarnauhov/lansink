@@ -502,7 +502,7 @@ void Sender::Impl::_send_data() {
             const size_t c = std::min(cAvailable, (cBytes/cFrameSize)*cFrameSize);
 
             if (c == 0)
-                throw LogicError("Queue element size isn't mulptiple of frame size");
+                throw LogicError("Queue element size isn't multiple of frame size");
 
             memcpy(pPos, pSource, c);
 
