@@ -93,6 +93,7 @@ struct ALSA {
     static int recover(snd_pcm_t *_pPcm, int _nError, bool _bSilent);
     static int wait(snd_pcm_t *_pPcm, int _nTimeout);
     static snd_pcm_sframes_t avail_update(snd_pcm_t *_pPcm);
+    static snd_pcm_sframes_t avail(snd_pcm_t *_pPcm);
     static int pause(snd_pcm_t *_pPcm, bool _bEnable);
     static int delay(snd_pcm_t *_pPcm, snd_pcm_sframes_t *_pDelay);
     static snd_pcm_state_t state(snd_pcm_t *_pPcm);

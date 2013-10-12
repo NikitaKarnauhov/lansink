@@ -159,6 +159,7 @@ private:
     bool _handle_command(lansink::Packet_Kind _kind, Samples *_pPacket);
     const Samples *_find_first_data_packet() const;
     snd_pcm_sframes_t _get_buffered_frames();
+    snd_pcm_sframes_t _get_available_frames(bool _bUpdate);
 };
 
 Player *Player::Impl::get(lansink::Packet &_packet, Log &_log) {
@@ -373,7 +374,7 @@ void Player::Impl::run() {
                     std::unique_lock<std::mutex> lock(m_mutex);
 
                     if (!m_queue.empty() || !m_bPaused) {
-                        snd_pcm_sframes_t nFrames = ALSA::avail_update(m_pPcm);
+                        snd_pcm_sframes_t nFrames = _get_available_frames(true);
 
                         m_pLog->debug("%ld frames can be written", nFrames);
 
@@ -404,7 +405,7 @@ void Player::Impl::run() {
 
                     // Don't wake up early if we're paused anyway.
                     const snd_pcm_sframes_t nDelay = m_bPaused ? m_cPeriodSize :
-                            _get_buffered_frames();
+                            m_cBufferSize - _get_available_frames(false);
 
                     // Try to wakeup before underrun happens.
                     constexpr int c_nMarginMS = 5;
@@ -536,6 +537,23 @@ snd_pcm_sframes_t Player::Impl::_get_buffered_frames() {
         nDelay = 0;
 
     return nDelay;
+}
+
+snd_pcm_sframes_t Player::Impl::_get_available_frames(bool _bUpdate) {
+    snd_pcm_sframes_t nFrames;
+
+    try {
+        nFrames = _bUpdate ? ALSA::avail_update(m_pPcm) : ALSA::avail(m_pPcm);
+        m_nBufferedFrames = m_cBufferSize - nFrames;
+    } catch (ALSA::Error &e) {
+        if (e.get_error() == -EIO) {
+            m_pLog->warning(e.what());
+            nFrames = std::max<snd_pcm_sframes_t>(0, m_cBufferSize - m_nBufferedFrames);
+        } else
+            throw;
+    }
+
+    return nFrames;
 }
 
 void Player::Impl::_add_samples(size_t _cFrames) {

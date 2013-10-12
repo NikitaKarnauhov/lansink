@@ -205,6 +205,15 @@ snd_pcm_sframes_t ALSA::avail_update(snd_pcm_t *_pPcm) {
     return nResult;
 }
 
+snd_pcm_sframes_t ALSA::avail(snd_pcm_t *_pPcm) {
+    snd_pcm_sframes_t nResult = snd_pcm_avail(_pPcm);
+
+    if (nResult < 0)
+        throw Error(nResult, "snd_pcm_avail()");
+
+    return nResult;
+}
+
 int ALSA::pause(snd_pcm_t *_pPcm, bool _bEnable) {
     const int nResult = snd_pcm_pause(_pPcm, _bEnable);
 
