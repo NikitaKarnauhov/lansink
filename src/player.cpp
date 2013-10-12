@@ -275,9 +275,11 @@ void Player::Impl::play(lansink::Packet &_packet) {
     if (m_bClosed)
         return;
 
-    m_pLog->debug("version = %u; stream = %llu; kind = %d, format = %s, channels = %u; rate = %u; timestamp = %llu; frames = %u",
-            _packet.version(), _packet.stream(), _packet.kind(), _packet.format().c_str(),
-            _packet.channels(), _packet.rate(), _packet.timestamp(), _packet.samples().size());
+    m_pLog->debug("Received: version = %u; stream = %llu; kind = %d, running = %d, format = %s, "
+            "channels = %u; rate = %u; timestamp = %llu; frames = %u",
+            _packet.version(), _packet.stream(), _packet.kind(), _packet.running(),
+            _packet.format().c_str(), _packet.channels(), _packet.rate(), _packet.timestamp(),
+            _packet.samples().size());
 
     if (!m_bStarted) {
         m_nFramesBase = std::min<snd_pcm_sframes_t>(_packet.timestamp(), m_nFramesBase);
