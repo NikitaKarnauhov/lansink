@@ -49,14 +49,18 @@ struct Samples {
     std::string data;
     size_t cOffset;
     bool bRunning;
+    bool bDraining;
 
     Samples(lansink::Packet &_packet) :
         kind(_packet.kind()), cTimestamp(_packet.timestamp()),
         data(std::move(*_packet.mutable_samples())), cOffset(0),
-        bRunning(_packet.kind() != lansink::Packet_Kind_CACHE)
+        bRunning(_packet.kind() != lansink::Packet_Kind_CACHE),
+        bDraining(_packet.kind() == lansink::Packet_Kind_DRAIN)
     {
         if (kind == lansink::Packet_Kind_CACHE)
             kind = lansink::Packet_Kind_DATA;
+        else if (kind == lansink::Packet_Kind_DRAIN)
+            kind = lansink::Packet_Kind_STOP;
     }
 
     bool operator <(const Samples &_other) const {
@@ -95,7 +99,7 @@ public:
         m_cPeriodSize(512), m_format(SND_PCM_FORMAT_UNKNOWN), m_cRate(0), m_cChannelCount(0),
         m_cFrameBytes(0), m_cFramesWritten(0), m_pLog(&_log), m_bReady(false), m_bPaused(false),
         m_bCanBePaused(false), m_bEmulatedPause(false), m_bClosed(false), m_bStarted(false),
-        m_nLastError(0), m_bProcessCommands(false), m_nBufferedFrames(0),
+        m_bDraining(false), m_nLastError(0), m_bProcessCommands(false), m_nBufferedFrames(0),
         m_averageDelay(c_cBaseFramesAdjustmentPacketCount) {}
 
     ~Impl() {
@@ -141,6 +145,7 @@ private:
     bool m_bEmulatedPause;
     bool m_bClosed;
     bool m_bStarted;
+    bool m_bDraining;
     std::condition_variable m_dataAvailable;
     int m_nLastError;
     bool m_bProcessCommands;
@@ -260,6 +265,7 @@ void Player::Impl::_init() {
         m_bEmulatedPause = false;
         m_bStarted = false;
         m_bClosed = false;
+        m_bDraining = false;
         m_nBufferedFrames = 0;
         m_averageDelay.clear();
         m_pLog->info("Opened ALSA device \"%s\"", g_settings.strALSADevice.c_str());
@@ -348,10 +354,7 @@ void Player::Impl::run() {
                 if (m_bClosed) {
                     std::lock_guard<std::mutex> lock(m_mutex);
 
-                    if (m_nLastError != 0 || m_bPaused) {
-                        m_pLog->info("Closing stream %llu", m_cStreamId);
-                        ALSA::close(m_pPcm);
-                    } else {
+                    if (m_bDraining && m_nLastError == 0 && !m_bPaused) {
                         m_pLog->info("Draining stream %llu", m_cStreamId);
 
                         // Work around pulse_drain() lock up in PulseAudio output module.
@@ -368,10 +371,11 @@ void Player::Impl::run() {
                             // Do nothing.
                         }
 
-                        m_pLog->info("Closing stream %llu", m_cStreamId);
-                        ALSA::close(m_pPcm);
+                        m_bDraining = false;
                     }
 
+                    m_pLog->info("Closing stream %llu", m_cStreamId);
+                    ALSA::close(m_pPcm);
                     m_pPcm = nullptr;
 
                     if (!m_queue.empty()) {
@@ -517,6 +521,7 @@ bool Player::Impl::_handle_command(lansink::Packet_Kind _kind, Samples *_pPacket
 
         case lansink::Packet_Kind_STOP:
             m_bClosed = true;
+            m_bDraining = _pPacket->bDraining;
             break;
 
         default:

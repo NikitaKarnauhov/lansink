@@ -102,6 +102,7 @@ private:
     static std::default_random_engine s_randomEngine;
     uint64_t m_cStreamId;
     std::atomic_bool m_bStarted;
+    bool m_bDraining;
 
     void _reset(bool _bResetStreamParams);
     std::function<void(void)> _make_worker();
@@ -125,7 +126,7 @@ std::default_random_engine Sender::Impl::s_randomEngine = std::default_random_en
 Sender::Impl::Impl(Sender *_pPlug) :
     m_pPlug(_pPlug), m_strFormat(""), m_cBitsPerSample(0), m_cChannels(0),
     m_nSockWorker(0), m_status(Sender::usStopped), m_nSocket(-1),
-    m_cStreamId(0), m_bStarted(false)
+    m_cStreamId(0), m_bStarted(false), m_bDraining(false)
 {
     if (s_cSeed == 0) {
         try {
@@ -244,6 +245,7 @@ void Sender::Impl::prepare() {
     m_bPrepared = true;
     m_status = Sender::usPaused;
     m_bStarted = false;
+    m_bDraining = false;
 }
 
 void Sender::Impl::drain() {
@@ -252,6 +254,7 @@ void Sender::Impl::drain() {
 
         assert(m_bPrepared);
         m_status = Sender::usStopping;
+        m_bDraining = true;
     }
 
     _stop_worker();

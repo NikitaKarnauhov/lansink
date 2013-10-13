@@ -37,7 +37,8 @@ message Packet {
 		CACHE = 1;
 		START = 2;
 		PAUSE = 3;
-		STOP = 4;
+		DRAIN = 4;
+		STOP = 5;
 	}
 
 	required fixed32 version = 1;
