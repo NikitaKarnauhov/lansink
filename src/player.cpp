@@ -97,10 +97,10 @@ public:
     Impl(uint64_t _cStreamId, Log &_log) :
         m_cStreamId(_cStreamId), m_pPcm(nullptr), m_cBufferSize(2048),
         m_cPeriodSize(512), m_format(SND_PCM_FORMAT_UNKNOWN), m_cRate(0), m_cChannelCount(0),
-        m_cFrameBytes(0), m_cFramesWritten(0), m_pLog(&_log), m_bReady(false), m_bPaused(false),
-        m_bCanBePaused(false), m_bEmulatedPause(false), m_bClosed(false), m_bStarted(false),
-        m_bDraining(false), m_nLastError(0), m_bProcessCommands(false), m_nBufferedFrames(0),
-        m_averageDelay(c_cBaseFramesAdjustmentPacketCount) {}
+        m_cFrameBytes(0), m_cFramesWritten(0), m_nFramesBase(0), m_pLog(&_log), m_bReady(false),
+        m_bPaused(false), m_bCanBePaused(false), m_bEmulatedPause(false), m_bClosed(false),
+        m_bStarted(false), m_bDraining(false), m_nLastError(0), m_bProcessCommands(false),
+        m_nBufferedFrames(0), m_averageDelay(c_cBaseFramesAdjustmentPacketCount) {}
 
     ~Impl() {
         if (m_pPcm) {
