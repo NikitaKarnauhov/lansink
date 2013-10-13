@@ -441,17 +441,19 @@ void Sender::Impl::_stop_worker() {
 void Sender::Impl::_prepare_packet(lansink::Packet &_packet, lansink::Packet_Kind _kind,
         uint64_t _nTimestamp)
 {
+    if (_kind == lansink::Packet_Kind_DATA) {
+        if (m_status != Sender::usRunning && m_status != Sender::usStopping)
+            _kind = lansink::Packet_Kind_CACHE;
+    } else
+        _packet.set_samples("");
+
     _packet.set_version(1);
     _packet.set_stream(m_cStreamId);
     _packet.set_kind(_kind);
-    _packet.set_running(m_status == Sender::usRunning || m_status == Sender::usStopping);
     _packet.set_channels(m_cChannels);
     _packet.set_rate(m_pPlug->get_rate());
     _packet.set_format(m_strFormat);
     _packet.set_timestamp(_nTimestamp);
-
-    if (_kind != lansink::Packet_Kind_DATA)
-        _packet.set_samples("");
 }
 
 void Sender::Impl::_send_packet(const lansink::Packet &_packet) {

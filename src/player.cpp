@@ -53,8 +53,10 @@ struct Samples {
     Samples(lansink::Packet &_packet) :
         kind(_packet.kind()), cTimestamp(_packet.timestamp()),
         data(std::move(*_packet.mutable_samples())), cOffset(0),
-        bRunning(_packet.running())
+        bRunning(_packet.kind() != lansink::Packet_Kind_CACHE)
     {
+        if (kind == lansink::Packet_Kind_CACHE)
+            kind = lansink::Packet_Kind_DATA;
     }
 
     bool operator <(const Samples &_other) const {
@@ -285,9 +287,9 @@ void Player::Impl::play(lansink::Packet &_packet) {
     if (m_bClosed)
         return;
 
-    m_pLog->debug("Received: version = %u; stream = %llu; kind = %d, running = %d, format = %s, "
+    m_pLog->debug("Received: version = %u; stream = %llu; kind = %d, format = %s, "
             "channels = %u; rate = %u; timestamp = %llu; frames = %u",
-            _packet.version(), _packet.stream(), _packet.kind(), _packet.running(),
+            _packet.version(), _packet.stream(), _packet.kind(),
             _packet.format().c_str(), _packet.channels(), _packet.rate(), _packet.timestamp(),
             _packet.samples().size());
 
@@ -296,7 +298,9 @@ void Player::Impl::play(lansink::Packet &_packet) {
         m_cFramesWritten = m_nFramesBase;
     }
 
-    if (_packet.kind() != lansink::Packet_Kind_DATA) {
+    if (_packet.kind() != lansink::Packet_Kind_DATA &&
+            _packet.kind() != lansink::Packet_Kind_CACHE)
+    {
         if (m_queue.insert(new Samples(_packet)).second)
             m_bProcessCommands = true;
     } else {
