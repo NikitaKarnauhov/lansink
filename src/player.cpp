@@ -61,7 +61,8 @@ struct Samples {
         if (cTimestamp + cOffset != _other.cTimestamp + cOffset)
             return cTimestamp + cOffset < _other.cTimestamp + cOffset;
 
-        return kind > _other.kind;
+        // So that STOP packet comes the last with any given timestamp.
+        return kind < _other.kind;
     }
 
     const char *get_data(size_t _cFrameBytes) const {
@@ -155,9 +156,10 @@ private:
     static Players s_players;
     static std::mutex s_playerMapMutex;
 
+    void _init();
     void _add_samples(size_t _cFrames);
     void _add_silence(size_t _cFrames);
-    void _handle_commands();
+    bool _handle_commands();
     bool _handle_command(lansink::Packet_Kind _kind, Samples *_pPacket);
     const Samples *_find_first_data_packet() const;
     snd_pcm_sframes_t _get_buffered_frames();
@@ -217,20 +219,17 @@ bool Player::Impl::remove_stopped(TimePoint &_closeTime) {
     return bNoErrors;
 }
 
-void Player::Impl::init(lansink::Packet &_packet) {
+void Player::Impl::_init() {
     try {
         snd_pcm_hw_params_t *pParams;
-
-        m_cChannelCount = _packet.channels();
 
         ALSA::open(&m_pPcm, g_settings.strALSADevice.c_str(), SND_PCM_STREAM_PLAYBACK, 0);
         ALSA::hw_params_malloc(&pParams);
         ALSA::hw_params_any(m_pPcm, pParams);
         ALSA::hw_params_set_access(m_pPcm, pParams, SND_PCM_ACCESS_RW_INTERLEAVED);
-        ALSA::hw_params_set_format(m_pPcm, pParams, get_format(_packet.format()));
-        m_cRate = _packet.rate();
+        ALSA::hw_params_set_format(m_pPcm, pParams, m_format);
         ALSA::hw_params_set_rate_near(m_pPcm, pParams, &m_cRate, 0);
-        ALSA::hw_params_set_channels(m_pPcm, pParams, _packet.channels());
+        ALSA::hw_params_set_channels(m_pPcm, pParams, m_cChannelCount);
         ALSA::hw_params_set_buffer_size_near(m_pPcm, pParams, &m_cBufferSize);
         ALSA::hw_params_set_period_size_near(m_pPcm, pParams, &m_cPeriodSize, NULL);
         ALSA::hw_params(m_pPcm, pParams);
@@ -248,17 +247,17 @@ void Player::Impl::init(lansink::Packet &_packet) {
 
         ALSA::prepare(m_pPcm);
 
-        m_cFrameBytes = ALSA::format_physical_width(get_format(_packet.format()))*_packet.channels()/8;
+        m_cFrameBytes = ALSA::format_physical_width(m_format)*m_cChannelCount/8;
         m_cFramesWritten = 0;
         m_nFramesBase = std::numeric_limits<snd_pcm_sframes_t>::max();
         m_bReady = true;
         m_bProcessCommands = false;
-        m_queue.clear();
         m_elapsed = Clock::duration(0);
         m_startTime = TimePoint();
         m_bPaused = true;
         m_bEmulatedPause = false;
         m_bStarted = false;
+        m_bClosed = false;
         m_nBufferedFrames = 0;
         m_averageDelay.clear();
         m_pLog->info("Opened ALSA device \"%s\"", g_settings.strALSADevice.c_str());
@@ -271,6 +270,13 @@ void Player::Impl::init(lansink::Packet &_packet) {
             m_pPcm = nullptr;
         }
     }
+}
+
+void Player::Impl::init(lansink::Packet &_packet) {
+    m_cChannelCount = _packet.channels();
+    m_format = get_format(_packet.format());
+    m_cRate = _packet.rate();
+    _init();
 }
 
 void Player::Impl::play(lansink::Packet &_packet) {
@@ -360,10 +366,23 @@ void Player::Impl::run() {
 
                         m_pLog->info("Closing stream %llu", m_cStreamId);
                         ALSA::close(m_pPcm);
-                        // FIXME preserve unplayed queued packets that possibly are from new connection.
                     }
 
                     m_pPcm = nullptr;
+
+                    if (!m_queue.empty()) {
+                        // Already got new data from the stream, probably a rewind happened.
+                        _init();
+
+                        if (m_pPcm) {
+                            m_pLog->info("New data after STOP message, reusing stream %llu", m_cStreamId);
+                            bPrevPaused = m_bPaused;
+                            m_nFramesBase = (*m_queue.begin())->cTimestamp;
+                            m_cFramesWritten = m_nFramesBase;
+                            continue;
+                        }
+                    }
+
                     break;
                 }
 
@@ -455,6 +474,7 @@ void Player::Impl::run() {
                     } else if (e.get_error() == -EIO) {
                         // Cannot recover from EIO: someone tells us device was unplugged.
                         m_bClosed = true;
+                        m_queue.clear();
                     }
 
                     std::lock_guard<std::mutex> lock(m_mutex);
@@ -468,6 +488,7 @@ void Player::Impl::run() {
             ALSA::close(m_pPcm);
             m_pPcm = nullptr;
             m_bClosed = true;
+            m_queue.clear();
         }
     });
 }
@@ -503,7 +524,7 @@ bool Player::Impl::_handle_command(lansink::Packet_Kind _kind, Samples *_pPacket
     return true;
 }
 
-void Player::Impl::_handle_commands() {
+bool Player::Impl::_handle_commands() {
     for (auto iSamples = m_queue.begin(); iSamples != m_queue.end();) {
         Samples *pSamples = *iSamples;
 
@@ -517,13 +538,23 @@ void Player::Impl::_handle_commands() {
         }
 
         if (_handle_command(pSamples->kind, pSamples))
-            if (pSamples->kind == lansink::Packet_Kind_STOP)
-                return;
+            if (pSamples->kind == lansink::Packet_Kind_STOP) {
+                // Clear queue up to the last STOP packet.
+                auto iLast = std::find_if(m_queue.rbegin(), m_queue.rend(),
+                        [](const Samples *_pSamples) {
+                            return _pSamples->kind == lansink::Packet_Kind_STOP;
+                        });
+
+                m_queue.erase(m_queue.begin(), iLast.base());
+                break;
+            }
 
         iSamples = m_queue.erase(iSamples);
     }
 
     m_bProcessCommands = false;
+
+    return !m_bClosed;
 }
 
 void Player::Impl::_add_silence(size_t _cFrames) {
@@ -601,7 +632,8 @@ void Player::Impl::_add_samples(size_t _cFrames) {
     assert(m_cFrameBytes > 0);
 
     if (m_bProcessCommands)
-        _handle_commands();
+        if (!_handle_commands())
+            return;
 
     if (m_bEmulatedPause) {
         _cFrames = std::max<size_t>(m_cPeriodSize, _cFrames);
