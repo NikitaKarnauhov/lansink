@@ -261,6 +261,7 @@ void Player::Impl::_init() {
         m_bProcessCommands = false;
         m_elapsed = Clock::duration(0);
         m_startTime = TimePoint();
+        m_lastWrite = TimePoint();
         m_bPaused = true;
         m_bEmulatedPause = false;
         m_bStarted = false;
@@ -436,17 +437,18 @@ void Player::Impl::run() {
                         if (nFrames > 0 && m_cFramesWritten >= 2*m_cPeriodSize)
                             nFrames = nFrames > (snd_pcm_sframes_t)m_cPeriodSize ? m_cPeriodSize : nFrames;
 
-                        _add_samples(nFrames);
-                        m_lastWrite = Clock::now();
-
 #ifndef NDEBUG
-                        {
+                        if (m_lastWrite != TimePoint()) {
                             const snd_pcm_sframes_t nDelay = _get_buffered_frames();
+                            snd_pcm_sframes_t nFrames = _get_available_frames(true);
                             MilliSeconds ms(std::chrono::duration_cast<MilliSeconds>(Clock::now() - m_lastWrite));
-                            m_pLog->debug("Time since last write: %d ms; buffered frames: %ld; state: %d",
-                                    ms.count(), nDelay, snd_pcm_state(m_pPcm));
+                            m_pLog->debug("Time since last write: %d ms; delay: %ld; available frames: %ld; state: %d",
+                                    ms.count(), nDelay, nFrames, snd_pcm_state(m_pPcm));
                         }
 #endif
+
+                        _add_samples(nFrames);
+                        m_lastWrite = Clock::now();
 
                         if (ALSA::state(m_pPcm) == SND_PCM_STATE_PREPARED && !m_bPaused) {
                             m_pLog->info("Starting playback (delay: %ld)", _get_buffered_frames());
