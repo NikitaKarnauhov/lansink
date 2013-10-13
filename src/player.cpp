@@ -644,6 +644,20 @@ void Player::Impl::_add_samples(size_t _cFrames) {
                 "packet delay = %ld, average delay = %.2f", pSamples->cTimestamp,
                 pSamples->cOffset, nPosition, nPacketDelay, m_averageDelay.get());
 
+        if (!m_bPaused) {
+            m_averageDelay.add(nPacketDelay);
+
+            if (m_averageDelay.is_full() &&
+                    std::abs(m_averageDelay.get()) > c_nBaseFramesAdjustmentThreshold)
+            {
+                const snd_pcm_sframes_t nAdjustment = m_averageDelay.get();
+                m_pLog->warning("Adjusting base frame count: %ld", nAdjustment);
+                m_nFramesBase += nAdjustment;
+                nPosition += nAdjustment;
+                m_averageDelay.clear();
+            }
+        }
+
         if (nNext > nPosition + c_nThreshold) {
             // Pad with silence.
             const size_t cFrames = std::min<size_t>(nNext - nPosition, _cFrames);
@@ -674,20 +688,6 @@ void Player::Impl::_add_samples(size_t _cFrames) {
         }
 
         m_queue.erase(m_queue.begin());
-
-        if (!m_bPaused) {
-            m_averageDelay.add(nPacketDelay);
-
-            if (m_averageDelay.is_full() &&
-                    std::abs(m_averageDelay.get()) > c_nBaseFramesAdjustmentThreshold)
-            {
-                const snd_pcm_sframes_t nAdjustment = m_averageDelay.get();
-                m_pLog->warning("Adjusting base frame count: %ld", nAdjustment);
-                m_nFramesBase += nAdjustment;
-                nPosition += nAdjustment;
-                m_averageDelay.clear();
-            }
-        }
 
         const size_t cWriteSize = std::min(_cFrames, pSamples->get_frame_count(m_cFrameBytes));
 
