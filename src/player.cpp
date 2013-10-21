@@ -454,7 +454,6 @@ void Player::Impl::run() {
                             m_pLog->info("Starting playback (delay: %ld)", _get_buffered_frames());
                             ALSA::start(m_pPcm);
                             m_bStarted = true;
-                            m_bPaused = false;
                             bPrevPaused = false;
                         }
                     }
