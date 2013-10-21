@@ -623,7 +623,6 @@ snd_pcm_sframes_t Player::Impl::_get_available_frames(bool _bSync) {
     if (state == SND_PCM_STATE_PREPARED || state == SND_PCM_STATE_RUNNING)
         try {
             nFrames = _bSync ? ALSA::avail(m_pPcm) : ALSA::avail_update(m_pPcm);
-            m_nBufferedFrames = m_cBufferSize - nFrames;
         } catch (ALSA::Error &e) {
             if (e.get_error() == -EIO) {
                 m_pLog->warning(e.what());
@@ -670,6 +669,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
     if (!m_bPaused)
         position += (Clock::now() - m_startTime);
 
+    // FIXME pulse sink returns unrealistic delays (avail() results are even less realistic).
     const snd_pcm_sframes_t nDelay = _get_buffered_frames();
     typedef Clock::duration::period Period;
     snd_pcm_sframes_t nPosition = nDelay + m_nFramesBase +
