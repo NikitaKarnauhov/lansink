@@ -216,7 +216,24 @@ std::string _in_addr_to_string(struct sockaddr *_pAddr) {
 }
 
 static
-void _main(Log &_log) {
+bool _write_pid(Log &_log) {
+    // Specify empty PID path to disable writing PID.
+    if (g_settings.strPIDPath.empty())
+        return false;
+
+    std::ofstream os(g_settings.strPIDPath);
+
+    if (!os.good())
+        throw RuntimeError("Cannot write PID file: %s", g_settings.strPIDPath.c_str());
+
+    os << getpid() << std::endl;
+    _log.info("PID file written to %s", g_settings.strPIDPath.c_str());
+
+    return true;
+}
+
+static
+void _main(Log &_log, bool &_bPIDWritten) {
     std::string strPort = format(16, "%d", g_settings.nPort);
     struct addrinfo hints = {};
     struct addrinfo *pServerInfo = nullptr;
@@ -239,6 +256,8 @@ void _main(Log &_log) {
             _in_addr_to_string(pServerInfo->ai_addr).c_str(), g_settings.nPort);
 
     freeaddrinfo(pServerInfo);
+
+    _bPIDWritten = _write_pid(_log);
 
     struct pollfd fd{nSocket, POLLIN, 0};
     constexpr size_t cBufferSize = 1024*100; // Should be enough, right?
@@ -327,23 +346,6 @@ void _main(Log &_log) {
 }
 
 static
-bool _write_pid(Log &_log) {
-    // Specify empty PID path to disable writing PID.
-    if (g_settings.strPIDPath.empty())
-        return false;
-
-    std::ofstream os(g_settings.strPIDPath);
-
-    if (!os.good())
-        throw RuntimeError("Cannot write PID file: %s", g_settings.strPIDPath.c_str());
-
-    os << getpid() << std::endl;
-    _log.info("PID file written to %s", g_settings.strPIDPath.c_str());
-
-    return true;
-}
-
-static
 void _handle_signal(int _nSignal, siginfo_t *_pSigInfo, void *_pContext) {
     g_nExitSignal = _nSignal;
 }
@@ -367,7 +369,7 @@ void _init_signals() {
 
 int main(int _nArgs, char *const _pArgs[]) {
     Log log("");
-    bool bPIDWritten = false;
+    bool bPIDWritten = false; // FIXME do not overwrite PID if failed to start.
 
     log.setLevel(llError);
 
@@ -388,8 +390,7 @@ int main(int _nArgs, char *const _pArgs[]) {
         }
 
         _init_signals();
-        bPIDWritten = _write_pid(log);
-        _main(log);
+        _main(log, bPIDWritten);
     } catch (std::exception &e) {
         log.error(e.what());
         return EXIT_FAILURE;
