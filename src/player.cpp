@@ -80,13 +80,6 @@ struct Samples {
     }
 };
 
-template<class _T>
-struct PtrLess {
-    bool operator ()(const _T *_pLhs, const _T *_pRhs) const {
-        return *_pLhs < *_pRhs;
-    }
-};
-
 typedef std::set<Samples *, PtrLess<Samples> > SampleQueue;
 
 constexpr size_t c_cBaseFramesAdjustmentPacketCount = 20;

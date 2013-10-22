@@ -88,4 +88,11 @@ private:
     std::deque<Sample> m_samples;
 };
 
+template<class _T>
+struct PtrLess {
+    bool operator ()(const _T *_pLhs, const _T *_pRhs) const {
+        return *_pLhs < *_pRhs;
+    }
+};
+
 #endif /* LANSINK_UTILS_H_ */
