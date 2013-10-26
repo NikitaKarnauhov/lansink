@@ -33,7 +33,7 @@
 
 #include <stdarg.h>
 
-int ALSA::open(snd_pcm_t **_ppPcm, const char *_strName, snd_pcm_stream_t _stream, int _nMode) {
+int alsa::open(snd_pcm_t **_ppPcm, const char *_strName, snd_pcm_stream_t _stream, int _nMode) {
     const int nResult = snd_pcm_open(_ppPcm, _strName, _stream, _nMode);
 
     if (nResult < 0)
@@ -43,7 +43,7 @@ int ALSA::open(snd_pcm_t **_ppPcm, const char *_strName, snd_pcm_stream_t _strea
     return nResult;
 }
 
-int ALSA::hw_params_malloc(snd_pcm_hw_params_t **_ppParams) {
+int alsa::hw_params_malloc(snd_pcm_hw_params_t **_ppParams) {
     const int nResult = snd_pcm_hw_params_malloc(_ppParams);
 
     if (nResult < 0)
@@ -52,7 +52,7 @@ int ALSA::hw_params_malloc(snd_pcm_hw_params_t **_ppParams) {
     return nResult;
 }
 
-int ALSA::hw_params_any(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams) {
+int alsa::hw_params_any(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams) {
     const int nResult = snd_pcm_hw_params_any(_pPcm, _pParams);
 
     if (nResult < 0)
@@ -61,7 +61,7 @@ int ALSA::hw_params_any(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams) {
     return nResult;
 }
 
-int ALSA::hw_params_set_access(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams,
+int alsa::hw_params_set_access(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams,
         snd_pcm_access_t _access)
 {
     const int nResult = snd_pcm_hw_params_set_access(_pPcm, _pParams, _access);
@@ -72,7 +72,7 @@ int ALSA::hw_params_set_access(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams,
     return nResult;
 }
 
-int ALSA::hw_params_set_format(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams,
+int alsa::hw_params_set_format(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams,
         snd_pcm_format_t _format)
 {
     const int nResult = snd_pcm_hw_params_set_format(_pPcm, _pParams, _format);
@@ -83,7 +83,7 @@ int ALSA::hw_params_set_format(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams,
     return nResult;
 }
 
-int ALSA::hw_params_set_rate_near(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams,
+int alsa::hw_params_set_rate_near(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams,
         unsigned int *_puRate, int *_pnDir)
 {
     const int nResult = snd_pcm_hw_params_set_rate_near(_pPcm, _pParams, _puRate, _pnDir);
@@ -94,7 +94,7 @@ int ALSA::hw_params_set_rate_near(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParam
     return nResult;
 }
 
-int ALSA::hw_params_set_channels(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams,
+int alsa::hw_params_set_channels(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams,
         unsigned int _uChannels)
 {
     const int nResult = snd_pcm_hw_params_set_channels(_pPcm, _pParams, _uChannels);
@@ -105,7 +105,7 @@ int ALSA::hw_params_set_channels(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams
     return nResult;
 }
 
-int ALSA::hw_params_set_buffer_size_near(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams,
+int alsa::hw_params_set_buffer_size_near(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams,
         snd_pcm_uframes_t *_puSize)
 {
     const int nResult = snd_pcm_hw_params_set_buffer_size_near(_pPcm, _pParams, _puSize);
@@ -116,7 +116,7 @@ int ALSA::hw_params_set_buffer_size_near(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *
     return nResult;
 }
 
-int ALSA::hw_params_set_period_size_near(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams,
+int alsa::hw_params_set_period_size_near(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams,
         snd_pcm_uframes_t *_puSize, int *_pnDir)
 {
     const int nResult = snd_pcm_hw_params_set_period_size_near(_pPcm, _pParams, _puSize, _pnDir);
@@ -127,11 +127,11 @@ int ALSA::hw_params_set_period_size_near(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *
     return nResult;
 }
 
-bool ALSA::hw_params_can_pause(snd_pcm_hw_params_t *_pParams) {
+bool alsa::hw_params_can_pause(snd_pcm_hw_params_t *_pParams) {
     return snd_pcm_hw_params_can_pause(_pParams) == 1;
 }
 
-int ALSA::hw_params(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams) {
+int alsa::hw_params(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams) {
     const int nResult = snd_pcm_hw_params(_pPcm, _pParams);
 
     if (nResult < 0)
@@ -140,11 +140,11 @@ int ALSA::hw_params(snd_pcm_t *_pPcm, snd_pcm_hw_params_t *_pParams) {
     return nResult;
 }
 
-void ALSA::hw_params_free(snd_pcm_hw_params_t *_pParams) {
+void alsa::hw_params_free(snd_pcm_hw_params_t *_pParams) {
     snd_pcm_hw_params_free(_pParams);
 }
 
-int ALSA::prepare(snd_pcm_t *_pPcm) {
+int alsa::prepare(snd_pcm_t *_pPcm) {
     const int nResult = snd_pcm_prepare(_pPcm);
 
     if (nResult < 0)
@@ -153,7 +153,7 @@ int ALSA::prepare(snd_pcm_t *_pPcm) {
     return nResult;
 }
 
-int ALSA::drain(snd_pcm_t *_pPcm) {
+int alsa::drain(snd_pcm_t *_pPcm) {
     const int nResult = snd_pcm_drain(_pPcm);
 
     if (nResult < 0)
@@ -162,7 +162,7 @@ int ALSA::drain(snd_pcm_t *_pPcm) {
     return nResult;
 }
 
-int ALSA::close(snd_pcm_t *_pPcm) {
+int alsa::close(snd_pcm_t *_pPcm) {
     const int nResult = snd_pcm_close(_pPcm);
 
     if (nResult < 0)
@@ -171,7 +171,7 @@ int ALSA::close(snd_pcm_t *_pPcm) {
     return nResult;
 }
 
-snd_pcm_sframes_t ALSA::writei(snd_pcm_t *_pPcm, const void *_pBuffer,
+snd_pcm_sframes_t alsa::writei(snd_pcm_t *_pPcm, const void *_pBuffer,
         snd_pcm_uframes_t _cSize)
 {
     const int nResult = snd_pcm_writei(_pPcm, _pBuffer, _cSize);
@@ -182,7 +182,7 @@ snd_pcm_sframes_t ALSA::writei(snd_pcm_t *_pPcm, const void *_pBuffer,
     return nResult;
 }
 
-int ALSA::recover(snd_pcm_t *_pPcm, int _nError, bool _bSilent) {
+int alsa::recover(snd_pcm_t *_pPcm, int _nError, bool _bSilent) {
     const int nResult = snd_pcm_recover(_pPcm, _nError, _bSilent);
 
     if (nResult < 0)
@@ -191,7 +191,7 @@ int ALSA::recover(snd_pcm_t *_pPcm, int _nError, bool _bSilent) {
     return nResult;
 }
 
-int ALSA::wait(snd_pcm_t *_pPcm, int _nTimeout) {
+int alsa::wait(snd_pcm_t *_pPcm, int _nTimeout) {
     const int nResult = snd_pcm_wait(_pPcm, _nTimeout);
 
     if (nResult < 0)
@@ -200,7 +200,7 @@ int ALSA::wait(snd_pcm_t *_pPcm, int _nTimeout) {
     return nResult;
 }
 
-snd_pcm_sframes_t ALSA::avail_update(snd_pcm_t *_pPcm) {
+snd_pcm_sframes_t alsa::avail_update(snd_pcm_t *_pPcm) {
     const int nResult = snd_pcm_avail_update(_pPcm);
 
     if (nResult < 0)
@@ -209,7 +209,7 @@ snd_pcm_sframes_t ALSA::avail_update(snd_pcm_t *_pPcm) {
     return nResult;
 }
 
-snd_pcm_sframes_t ALSA::avail(snd_pcm_t *_pPcm) {
+snd_pcm_sframes_t alsa::avail(snd_pcm_t *_pPcm) {
     snd_pcm_sframes_t nResult = snd_pcm_avail(_pPcm);
 
     if (nResult < 0)
@@ -218,7 +218,7 @@ snd_pcm_sframes_t ALSA::avail(snd_pcm_t *_pPcm) {
     return nResult;
 }
 
-int ALSA::pause(snd_pcm_t *_pPcm, bool _bEnable) {
+int alsa::pause(snd_pcm_t *_pPcm, bool _bEnable) {
     const int nResult = snd_pcm_pause(_pPcm, _bEnable);
 
     if (nResult < 0)
@@ -227,7 +227,7 @@ int ALSA::pause(snd_pcm_t *_pPcm, bool _bEnable) {
     return nResult;
 }
 
-unsigned int ALSA::format_physical_width(snd_pcm_format_t _format) {
+unsigned int alsa::format_physical_width(snd_pcm_format_t _format) {
     const int nResult = snd_pcm_format_physical_width(_format);
 
     if (nResult < 0)
@@ -236,7 +236,7 @@ unsigned int ALSA::format_physical_width(snd_pcm_format_t _format) {
     return nResult;
 }
 
-int ALSA::start(snd_pcm_t *_pPcm) {
+int alsa::start(snd_pcm_t *_pPcm) {
     const int nResult = snd_pcm_start(_pPcm);
 
     if (nResult < 0)
@@ -245,7 +245,7 @@ int ALSA::start(snd_pcm_t *_pPcm) {
     return nResult;
 }
 
-int ALSA::ioplug_set_param_list(snd_pcm_ioplug_t *_pIO, int _nType,
+int alsa::ioplug_set_param_list(snd_pcm_ioplug_t *_pIO, int _nType,
         unsigned int _cNumList, const unsigned int *_pcList)
 {
     const int nResult = snd_pcm_ioplug_set_param_list(_pIO, _nType, _cNumList, _pcList);
@@ -257,7 +257,7 @@ int ALSA::ioplug_set_param_list(snd_pcm_ioplug_t *_pIO, int _nType,
     return nResult;
 }
 
-int ALSA::ioplug_set_param_minmax(snd_pcm_ioplug_t *_pIO, int _nType,
+int alsa::ioplug_set_param_minmax(snd_pcm_ioplug_t *_pIO, int _nType,
         unsigned int _cMin, unsigned int _cMax)
 {
     const int nResult = snd_pcm_ioplug_set_param_minmax(_pIO, _nType, _cMin, _cMax);
@@ -269,7 +269,7 @@ int ALSA::ioplug_set_param_minmax(snd_pcm_ioplug_t *_pIO, int _nType,
     return nResult;
 }
 
-int ALSA::ioplug_create(snd_pcm_ioplug_t *_pIO, const char *_strName,
+int alsa::ioplug_create(snd_pcm_ioplug_t *_pIO, const char *_strName,
               snd_pcm_stream_t _stream, int _nMode)
 {
     const int nResult = snd_pcm_ioplug_create(_pIO, _strName, _stream, _nMode);
@@ -281,7 +281,7 @@ int ALSA::ioplug_create(snd_pcm_ioplug_t *_pIO, const char *_strName,
     return nResult;
 }
 
-int ALSA::sw_params_current(snd_pcm_t *_pPcm, snd_pcm_sw_params_t *_pParams) {
+int alsa::sw_params_current(snd_pcm_t *_pPcm, snd_pcm_sw_params_t *_pParams) {
     const int nResult = snd_pcm_sw_params_current(_pPcm, _pParams);
 
     if (nResult < 0)
@@ -290,7 +290,7 @@ int ALSA::sw_params_current(snd_pcm_t *_pPcm, snd_pcm_sw_params_t *_pParams) {
     return nResult;
 }
 
-int ALSA::sw_params_set_start_threshold(snd_pcm_t *_pPcm,
+int alsa::sw_params_set_start_threshold(snd_pcm_t *_pPcm,
         snd_pcm_sw_params_t *_pParams, snd_pcm_uframes_t _cVal)
 {
     const int nResult = snd_pcm_sw_params_set_start_threshold(_pPcm, _pParams, _cVal);
@@ -301,7 +301,7 @@ int ALSA::sw_params_set_start_threshold(snd_pcm_t *_pPcm,
     return nResult;
 }
 
-int ALSA::sw_params_get_boundary(snd_pcm_sw_params_t *_pParams, snd_pcm_uframes_t *_pVal) {
+int alsa::sw_params_get_boundary(snd_pcm_sw_params_t *_pParams, snd_pcm_uframes_t *_pVal) {
     const int nResult = snd_pcm_sw_params_get_boundary(_pParams, _pVal);
 
     if (nResult < 0)
@@ -310,7 +310,7 @@ int ALSA::sw_params_get_boundary(snd_pcm_sw_params_t *_pParams, snd_pcm_uframes_
     return nResult;
 }
 
-int ALSA::sw_params(snd_pcm_t *_pPcm, snd_pcm_sw_params_t *_pParams) {
+int alsa::sw_params(snd_pcm_t *_pPcm, snd_pcm_sw_params_t *_pParams) {
     const int nResult = snd_pcm_sw_params(_pPcm, _pParams);
 
     if (nResult < 0)
@@ -319,7 +319,7 @@ int ALSA::sw_params(snd_pcm_t *_pPcm, snd_pcm_sw_params_t *_pParams) {
     return nResult;
 }
 
-int ALSA::delay(snd_pcm_t *_pPcm, snd_pcm_sframes_t *_pDelay) {
+int alsa::delay(snd_pcm_t *_pPcm, snd_pcm_sframes_t *_pDelay) {
     const int nResult = snd_pcm_delay(_pPcm, _pDelay);
 
     if (nResult < 0)
@@ -328,6 +328,6 @@ int ALSA::delay(snd_pcm_t *_pPcm, snd_pcm_sframes_t *_pDelay) {
     return nResult;
 }
 
-snd_pcm_state_t ALSA::state(snd_pcm_t *_pPcm) {
+snd_pcm_state_t alsa::state(snd_pcm_t *_pPcm) {
     return snd_pcm_state(_pPcm);
 }

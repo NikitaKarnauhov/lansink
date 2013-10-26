@@ -76,23 +76,23 @@ public:
     virtual void recover(int _nError);
 
     virtual void report_state() {
-        m_pLog->debug("State: %d", ALSA::state(m_pPcm));
+        m_pLog->debug("State: %d", alsa::state(m_pPcm));
     }
 
     virtual bool is_buffering() const {
-        return ALSA::state(m_pPcm) == SND_PCM_STATE_PREPARED;
+        return alsa::state(m_pPcm) == SND_PCM_STATE_PREPARED;
     }
 
     virtual bool is_running() const {
-        return ALSA::state(m_pPcm) == SND_PCM_STATE_RUNNING;
+        return alsa::state(m_pPcm) == SND_PCM_STATE_RUNNING;
     }
 
     virtual bool is_paused() const {
-        return ALSA::state(m_pPcm) == SND_PCM_STATE_PAUSED;
+        return alsa::state(m_pPcm) == SND_PCM_STATE_PAUSED;
     }
 
     virtual bool is_underrun() const {
-        return ALSA::state(m_pPcm) == SND_PCM_STATE_XRUN;
+        return alsa::state(m_pPcm) == SND_PCM_STATE_XRUN;
     }
 
     virtual void start();
@@ -112,7 +112,7 @@ private:
     bool m_bCanBePaused;
     snd_pcm_sframes_t m_nBufferedFrames;
 
-    void _handle(ALSA::Error &_e) const __attribute__((noreturn));
+    void _handle(alsa::Error &_e) const __attribute__((noreturn));
 };
 
 ALSASink::ALSASink(Log &_log) :
@@ -125,12 +125,12 @@ ALSASink::ALSASink(Log &_log) :
 ALSASink::~ALSASink() {
     try {
         if (m_pPcm) {
-            ALSA::drain(m_pPcm);
-            ALSA::close(m_pPcm);
+            alsa::drain(m_pPcm);
+            alsa::close(m_pPcm);
         }
 
         m_pPcm = nullptr;
-    } catch (ALSA::Error &e) {
+    } catch (alsa::Error &e) {
         _handle(e);
     }
 }
@@ -146,34 +146,34 @@ bool ALSASink::prepare() {
         snd_pcm_hw_params_t *pParams;
 
         if (m_pPcm == nullptr) {
-            ALSA::open(&m_pPcm, g_settings.strALSADevice.c_str(), SND_PCM_STREAM_PLAYBACK, 0);
-            ALSA::hw_params_malloc(&pParams);
-            ALSA::hw_params_any(m_pPcm, pParams);
-            ALSA::hw_params_set_access(m_pPcm, pParams, SND_PCM_ACCESS_RW_INTERLEAVED);
-            ALSA::hw_params_set_format(m_pPcm, pParams, m_format);
-            ALSA::hw_params_set_rate_near(m_pPcm, pParams, &m_cRate, 0);
-            ALSA::hw_params_set_channels(m_pPcm, pParams, m_cChannelCount);
-            ALSA::hw_params_set_buffer_size_near(m_pPcm, pParams, &m_cBufferSize);
-            ALSA::hw_params_set_period_size_near(m_pPcm, pParams, &m_cPeriodSize, NULL);
-            ALSA::hw_params(m_pPcm, pParams);
-            m_bCanBePaused = ALSA::hw_params_can_pause(pParams);
-            ALSA::hw_params_free(pParams);
+            alsa::open(&m_pPcm, g_settings.strALSADevice.c_str(), SND_PCM_STREAM_PLAYBACK, 0);
+            alsa::hw_params_malloc(&pParams);
+            alsa::hw_params_any(m_pPcm, pParams);
+            alsa::hw_params_set_access(m_pPcm, pParams, SND_PCM_ACCESS_RW_INTERLEAVED);
+            alsa::hw_params_set_format(m_pPcm, pParams, m_format);
+            alsa::hw_params_set_rate_near(m_pPcm, pParams, &m_cRate, 0);
+            alsa::hw_params_set_channels(m_pPcm, pParams, m_cChannelCount);
+            alsa::hw_params_set_buffer_size_near(m_pPcm, pParams, &m_cBufferSize);
+            alsa::hw_params_set_period_size_near(m_pPcm, pParams, &m_cPeriodSize, NULL);
+            alsa::hw_params(m_pPcm, pParams);
+            m_bCanBePaused = alsa::hw_params_can_pause(pParams);
+            alsa::hw_params_free(pParams);
 
             snd_pcm_sw_params_t *pSWParams;
             snd_pcm_uframes_t cBoundary;
 
             snd_pcm_sw_params_alloca(&pSWParams);
-            ALSA::sw_params_current(m_pPcm, pSWParams);
-            ALSA::sw_params_get_boundary(pSWParams, &cBoundary);
-            ALSA::sw_params_set_start_threshold(m_pPcm, pSWParams, cBoundary);
-            ALSA::sw_params(m_pPcm, pSWParams);
+            alsa::sw_params_current(m_pPcm, pSWParams);
+            alsa::sw_params_get_boundary(pSWParams, &cBoundary);
+            alsa::sw_params_set_start_threshold(m_pPcm, pSWParams, cBoundary);
+            alsa::sw_params(m_pPcm, pSWParams);
 
             m_pLog->info("Opened ALSA device \"%s\"", g_settings.strALSADevice.c_str());
         }
 
-        ALSA::prepare(m_pPcm);
+        alsa::prepare(m_pPcm);
 
-        m_cFrameBytes = ALSA::format_physical_width(m_format)*m_cChannelCount/8;
+        m_cFrameBytes = alsa::format_physical_width(m_format)*m_cChannelCount/8;
         m_nBufferedFrames = 0;
         m_bReady = true;
     } catch (std::exception &e) {
@@ -181,7 +181,7 @@ bool ALSASink::prepare() {
         m_bReady = false;
 
         if (m_pPcm) {
-            ALSA::close(m_pPcm);
+            alsa::close(m_pPcm);
             m_pPcm = nullptr;
         }
 
@@ -193,11 +193,11 @@ bool ALSASink::prepare() {
 
 void ALSASink::pause(bool _bEnable) {
     try {
-        ALSA::pause(m_pPcm, _bEnable);
+        alsa::pause(m_pPcm, _bEnable);
 
         if (_bEnable)
             m_nBufferedFrames = get_delay();
-    } catch (ALSA::Error &e) {
+    } catch (alsa::Error &e) {
         _handle(e);
     }
 }
@@ -207,9 +207,9 @@ long ALSASink::get_delay() {
 
     if (is_buffering() || is_running())
         try {
-            ALSA::delay(m_pPcm, &nDelay);
+            alsa::delay(m_pPcm, &nDelay);
             m_nBufferedFrames = nDelay;
-        } catch (ALSA::Error &e) {
+        } catch (alsa::Error &e) {
             if (e.get_error() == -EIO) {
                 m_pLog->warning(e.what());
                 nDelay = std::min<snd_pcm_sframes_t>(m_cBufferSize, m_nBufferedFrames);
@@ -227,8 +227,8 @@ long ALSASink::get_avail(bool _bSync) {
 
     if (is_buffering() || is_running())
         try {
-            nFrames = _bSync ? ALSA::avail(m_pPcm) : ALSA::avail_update(m_pPcm);
-        } catch (ALSA::Error &e) {
+            nFrames = _bSync ? alsa::avail(m_pPcm) : alsa::avail_update(m_pPcm);
+        } catch (alsa::Error &e) {
             if (e.get_error() == -EIO) {
                 m_pLog->warning(e.what());
                 nFrames = std::max<snd_pcm_sframes_t>(0, get_buffer_size() - m_nBufferedFrames);
@@ -243,41 +243,41 @@ long ALSASink::get_avail(bool _bSync) {
 
 void ALSASink::recover(int _nError) {
     try {
-        ALSA::recover(m_pPcm, _nError, true);
+        alsa::recover(m_pPcm, _nError, true);
         m_nBufferedFrames = 0;
-    } catch (ALSA::Error &e) {
+    } catch (alsa::Error &e) {
         _handle(e);
     }
 }
 
 void ALSASink::start() {
     try {
-        ALSA::start(m_pPcm);
-    } catch (ALSA::Error &e) {
+        alsa::start(m_pPcm);
+    } catch (alsa::Error &e) {
         _handle(e);
     }
 }
 
 void ALSASink::close() {
     try {
-        ALSA::close(m_pPcm);
+        alsa::close(m_pPcm);
         m_pPcm = nullptr;
-    } catch (ALSA::Error &e) {
+    } catch (alsa::Error &e) {
         _handle(e);
     }
 }
 
 long ALSASink::write(const void *_pBuffer, unsigned long _cFrames) {
     try {
-        const snd_pcm_sframes_t nFramesWritten = ALSA::writei(m_pPcm, _pBuffer, _cFrames);
+        const snd_pcm_sframes_t nFramesWritten = alsa::writei(m_pPcm, _pBuffer, _cFrames);
         m_nBufferedFrames += nFramesWritten;
         return nFramesWritten;
-    } catch (ALSA::Error &e) {
+    } catch (alsa::Error &e) {
         _handle(e);
     }
 }
 
-void ALSASink::_handle(ALSA::Error &_e) const {
+void ALSASink::_handle(alsa::Error &_e) const {
     if (_e.get_error() == -EPIPE)
         throw Error(Error::seUnderrun, _e.get_error(), _e.what());
 

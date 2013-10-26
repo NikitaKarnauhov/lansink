@@ -107,7 +107,7 @@ snd_pcm_sframes_t lansink_transfer(snd_pcm_ioplug_t *_pPlug, const snd_pcm_chann
         // Force start playing if buffer is full.
         if (cFrames == 0 && _pPlug->state == SND_PCM_STATE_PREPARED) {
             pPlug->log.debug("Buffer is full, starting playback.");
-            ALSA::start(_pPlug->pcm);
+            alsa::start(_pPlug->pcm);
         }
 
         pPlug->log.debug("%s() = %d, _cOffset = %d, _cSize = %d",
@@ -262,15 +262,15 @@ void _set_hw_constraint(struct Sender *_pPlug)
         SND_PCM_ACCESS_RW_NONINTERLEAVED
     };
 
-    ALSA::ioplug_set_param_list(_pPlug, SND_PCM_IOPLUG_HW_ACCESS,
+    alsa::ioplug_set_param_list(_pPlug, SND_PCM_IOPLUG_HW_ACCESS,
                 accesses.size(), accesses.data());
-    ALSA::ioplug_set_param_list(_pPlug, SND_PCM_IOPLUG_HW_FORMAT,
+    alsa::ioplug_set_param_list(_pPlug, SND_PCM_IOPLUG_HW_FORMAT,
             _pPlug->get_format_values().size(), _pPlug->get_format_values().data());
-    ALSA::ioplug_set_param_list(_pPlug, SND_PCM_IOPLUG_HW_CHANNELS,
+    alsa::ioplug_set_param_list(_pPlug, SND_PCM_IOPLUG_HW_CHANNELS,
                     _pPlug->channelValues.size(), _pPlug->channelValues.data());
-    ALSA::ioplug_set_param_list(_pPlug, SND_PCM_IOPLUG_HW_RATE,
+    alsa::ioplug_set_param_list(_pPlug, SND_PCM_IOPLUG_HW_RATE,
             _pPlug->rateValues.size(), _pPlug->rateValues.data());
-    ALSA::ioplug_set_param_minmax(_pPlug, SND_PCM_IOPLUG_HW_PERIODS,
+    alsa::ioplug_set_param_minmax(_pPlug, SND_PCM_IOPLUG_HW_PERIODS,
                     g_cPeriods, g_cPeriods);
 }
 
@@ -420,7 +420,7 @@ SND_PCM_PLUGIN_DEFINE_FUNC(lansink) {
         pPlug->mmap_rw = 0;
         pPlug->callback = &callbacks::get();
         pPlug->private_data = pPlug;
-        ALSA::ioplug_create(pPlug, name, stream, mode);
+        alsa::ioplug_create(pPlug, name, stream, mode);
         _set_hw_constraint(pPlug);
         *pcmp = pPlug->pcm;
     } catch (std::exception &e) {

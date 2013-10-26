@@ -123,7 +123,7 @@ snd_pcm_format_t get_format(const std::string &_name) {
     auto iFormat = g_formats.find(_name);
 
     if (iFormat == g_formats.end())
-        throw ALSA::Error(-1, "Uknown format: %s", _name.c_str());
+        throw alsa::Error(-1, "Uknown format: %s", _name.c_str());
 
     return iFormat->second;
 }

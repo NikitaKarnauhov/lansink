@@ -231,7 +231,7 @@ void Sender::Impl::prepare() {
     _reset(true);
     m_nFramesQueued = 0;
     m_strFormat = get_format_name(m_pPlug->get_format());
-    m_cBitsPerSample = ALSA::format_physical_width(m_pPlug->get_format());
+    m_cBitsPerSample = alsa::format_physical_width(m_pPlug->get_format());
     m_cChannels = m_pPlug->get_channel_count();
 
     if (m_strFormat != strOldFormat || m_cBitsPerSample != cOldRate ||
