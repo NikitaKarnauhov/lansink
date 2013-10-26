@@ -42,6 +42,7 @@ set(SERVER_SOURCES
     daemon.cpp
     log.cpp
     alsa.cpp
+    alsa_sink.cpp
     player.cpp
     formats.cpp
     lexer.cpp

@@ -47,6 +47,11 @@ public:
         _Base(format(1024, _strFormat, _args...))
     {
     }
+
+    Exception(const std::string &_strMessage) :
+        _Base(_strMessage)
+    {
+    }
 };
 
 using RuntimeError = Exception<std::runtime_error>;
