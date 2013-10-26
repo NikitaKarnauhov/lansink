@@ -30,7 +30,6 @@
 */
 
 #include "sender.h"
-#include "formats.h"
 #include "exception.h"
 #include "alsa.h"
 
@@ -230,7 +229,7 @@ void Sender::Impl::prepare() {
 
     _reset(true);
     m_nFramesQueued = 0;
-    m_strFormat = get_format_name(m_pPlug->get_format());
+    m_strFormat = alsa::get_format_name(m_pPlug->get_format());
     m_cBitsPerSample = alsa::format_physical_width(m_pPlug->get_format());
     m_cChannels = m_pPlug->get_channel_count();
 
@@ -562,12 +561,8 @@ void Sender::Impl::connect() {
 const std::vector<unsigned int> &Sender::Impl::get_format_values() {
     m_formatValues.clear();
 
-    for (const std::string &strFormat : m_pPlug->formats) {
-        auto iFormat = g_formats.find(strFormat);
-
-        if (iFormat != g_formats.end())
-            m_formatValues.push_back(iFormat->second);
-    }
+    for (const std::string &strFormat : m_pPlug->formats)
+        m_formatValues.push_back(alsa::get_format(strFormat));
 
     return m_formatValues;
 }

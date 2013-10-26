@@ -34,7 +34,6 @@
 #include <alsa/asoundlib.h>
 
 #include "alsa.h"
-#include "formats.h"
 #include "settings.h"
 
 class ALSASink : public Sink {
@@ -138,7 +137,7 @@ ALSASink::~ALSASink() {
 void ALSASink::init(size_t _cChannels, const size_t _cRate, const std::string &_strFormat) {
     m_cChannelCount = _cChannels;
     m_cRate = _cRate;
-    m_format = get_format(_strFormat);
+    m_format = alsa::get_format(_strFormat);
 }
 
 bool ALSASink::prepare() {

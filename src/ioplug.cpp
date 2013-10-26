@@ -30,7 +30,6 @@
 */
 
 #include "sender.h"
-#include "formats.h"
 #include "exception.h"
 #include "alsa.h"
 
@@ -367,12 +366,9 @@ SND_PCM_PLUGIN_DEFINE_FUNC(lansink) {
                     continue;
 
                 snd_config_get_string(pEntry, &strValue);
-                auto iFormat = g_formats.find(strValue);
 
-                if (iFormat == g_formats.end())
-                    throw RuntimeError("Unknown format %s", strValue);
-
-                pPlug->formats.push_back(iFormat->first);
+                if (alsa::is_format(strValue))
+                    pPlug->formats.push_back(strValue);
             }
         } else
             pPlug->formats = {"U8", "S16_LE", "S16_BE", "S32_LE", "S32_BE", "FLOAT_LE", "FLOAT_BE",

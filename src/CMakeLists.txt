@@ -14,7 +14,6 @@ add_custom_command(
 set(CLIENT_SOURCES
     sender.cpp
     ioplug.cpp
-    formats.cpp
     alsa.cpp
     utils.cpp
     log.cpp
@@ -44,7 +43,6 @@ set(SERVER_SOURCES
     alsa.cpp
     alsa_sink.cpp
     player.cpp
-    formats.cpp
     lexer.cpp
     settings.cpp
     utils.cpp

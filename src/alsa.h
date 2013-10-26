@@ -115,6 +115,10 @@ int sw_params(snd_pcm_t *_pPcm, snd_pcm_sw_params_t *_pParams);
 
 unsigned int format_physical_width(snd_pcm_format_t _format);
 
+std::string get_format_name(snd_pcm_format_t _format);
+snd_pcm_format_t get_format(const std::string &_strName);
+bool is_format(const std::string &_strName);
+
 };
 
 #endif /* LANSINK_ALSA_H_ */
