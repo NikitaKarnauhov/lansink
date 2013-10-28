@@ -597,7 +597,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
                     std::abs(m_averageDelay.get()) > c_nBaseFramesAdjustmentThreshold)
             {
                 const long nAdjustment = m_averageDelay.get();
-                m_pLog->warning("Adjusting base frame count: %ld", nAdjustment);
+                m_pLog->debug("Adjusting base frame count: %ld", nAdjustment);
                 m_nFramesBase += nAdjustment;
                 nPosition += nAdjustment;
                 m_averageDelay.clear();
