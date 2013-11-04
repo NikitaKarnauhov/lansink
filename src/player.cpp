@@ -33,6 +33,7 @@
 
 #include <list>
 #include <set>
+#include <algorithm>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
