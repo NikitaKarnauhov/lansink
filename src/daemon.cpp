@@ -291,6 +291,7 @@ void _main(Log &_log, bool &_bPIDWritten) {
                 if (!packet.ParseFromArray(pBuf.get(), nPacketSize)) {
                     _log.warning("Broken packet from %s",
                             _in_addr_to_string((struct sockaddr *)&sender).c_str());
+                    packets.pop_back();
                     continue;
                 }
 
@@ -367,6 +368,22 @@ void _init_signals() {
 
 }
 
+static
+void _log_settings(Log & _log) {
+    _log.info("Running with the following settings:");
+    _log.info("daemon = %d", g_settings.bDaemon);
+    _log.info("exclusive = %d", g_settings.bExclusive);
+    _log.info("log-level = %d", g_settings.nLogLevel);
+    _log.info("port = %d", g_settings.nPort);
+    _log.info("recovery-timeout = %d", g_settings.nRecoveryTimeout);
+    _log.info("open-timeout = %d", g_settings.nOpenTimeout);
+    _log.info("buffered-packets = %d", g_settings.nBufferedPackets);
+    _log.info("log-path = %s", g_settings.strLogPath.c_str());
+    _log.info("pid-path = %s", g_settings.strPIDPath.c_str());
+    _log.info("host = %s", g_settings.strHost.c_str());
+    _log.info("alsa-device = %s", g_settings.strALSADevice.c_str());
+}
+
 int main(int _nArgs, char *const _pArgs[]) {
     Log log("");
     bool bPIDWritten = false; // FIXME do not overwrite PID if failed to start.
@@ -390,6 +407,7 @@ int main(int _nArgs, char *const _pArgs[]) {
         }
 
         _init_signals();
+        _log_settings(log);
         _main(log, bPIDWritten);
     } catch (std::exception &e) {
         log.error(e.what());
