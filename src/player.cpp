@@ -136,7 +136,7 @@ private:
     typedef std::chrono::duration<int, std::milli> MilliSeconds;
     typedef std::chrono::time_point<Clock> TimePoint;
 
-    TimePoint m_lastWrite, m_startTime;
+    TimePoint m_lastWrite, m_startTime, m_reportTime;
     Clock::duration m_elapsed;
 
     typedef std::map<uint64_t, Player *> Players;
@@ -214,6 +214,7 @@ void Player::Impl::_prepare() {
         m_elapsed = Clock::duration(0);
         m_startTime = TimePoint();
         m_lastWrite = TimePoint();
+        m_reportTime = Clock::now();
         m_bPaused = true;
         m_bEmulatedPause = false;
         m_bStarted = false;
@@ -259,6 +260,14 @@ void Player::Impl::play(lansink::Packet &_packet) {
         m_queue.insert(pSamples);
     }
 
+    const std::chrono::minutes mins =
+        std::chrono::duration_cast<std::chrono::minutes>(Clock::now() - m_reportTime);
+
+    if (mins.count() > 0) {
+        m_pLog->info("%u packets queued", m_queue.size());
+        m_reportTime = Clock::now();
+    }
+
     if (!m_queue.empty())
         m_dataAvailable.notify_all();
 }
@@ -287,7 +296,6 @@ void Player::Impl::run() {
                         m_bEmulatedPause = true;
                     } else
                         m_bEmulatedPause = false;
-
                 }
 
                 if (m_bClosed) {
