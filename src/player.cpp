@@ -136,7 +136,7 @@ private:
     typedef std::chrono::duration<int, std::milli> MilliSeconds;
     typedef std::chrono::time_point<Clock> TimePoint;
 
-    TimePoint m_lastWrite, m_startTime, m_reportTime;
+    TimePoint m_lastWrite, m_startTime, m_reportTime, m_xrunTime;
     Clock::duration m_elapsed;
 
     typedef std::map<uint64_t, Player *> Players;
@@ -214,6 +214,7 @@ void Player::Impl::_prepare() {
         m_elapsed = Clock::duration(0);
         m_startTime = TimePoint();
         m_lastWrite = TimePoint();
+        m_xrunTime = TimePoint();
         m_reportTime = Clock::now();
         m_bPaused = true;
         m_bEmulatedPause = false;
@@ -555,6 +556,9 @@ long Player::Impl::_get_available_frames(bool _bSync) {
 void Player::Impl::_add_samples(size_t _cFrames) {
     assert(m_pSink->get_frame_bytes() > 0);
 
+    if (!m_queue.empty())
+        m_xrunTime = TimePoint();
+
     if (m_bProcessCommands)
         if (!_handle_commands())
             return;
@@ -568,7 +572,18 @@ void Player::Impl::_add_samples(size_t _cFrames) {
     if (m_queue.empty()) {
         if (!m_bPaused) {
             _cFrames = std::max<size_t>(m_pSink->get_period_size(), _cFrames);
-            m_pLog->warning("Avoiding underrun (%lu frames max)", _cFrames);
+
+            if (m_xrunTime != TimePoint()) {
+                const auto seconds(std::chrono::duration_cast<std::chrono::seconds>(
+                        Clock::now() - m_xrunTime));
+                if (seconds.count() > g_settings.nRecoveryTimeout)
+                    throw RuntimeError("No data for %ld seconds", seconds.count());
+            } else {
+                m_pLog->warning("Avoiding underrun (%lu frames max, timeout %d seconds)",
+                        _cFrames, g_settings.nRecoveryTimeout);
+                m_xrunTime = Clock::now();
+            }
+
             _add_silence(_cFrames);
             m_cFramesWritten += _cFrames;
         }
