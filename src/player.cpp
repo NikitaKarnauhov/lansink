@@ -79,7 +79,41 @@ struct Samples {
     }
 };
 
-typedef std::set<Samples *, PtrLess<Samples> > SampleQueue;
+class SampleQueue : private std::set<Samples *, PtrLess<Samples> > {
+private:
+    using Base = std::set<Samples *, PtrLess<Samples> >;
+
+public:
+    using Iterator = Base::iterator;
+    using ReverseIterator = Base::reverse_iterator;
+
+    ~SampleQueue() { clear(); }
+
+    void init(size_t _cFrameBytes, size_t _cRate);
+    bool empty() const { return Base::empty(); }
+    size_t size() const { return Base::size(); }
+    size_t ms() const;
+    bool has_commands() const { return m_bHaveCommands; }
+    void clear_commands() { m_bHaveCommands = false; }
+    Iterator begin() const { return Base::begin(); }
+    Iterator end() const { return Base::end(); }
+    ReverseIterator rbegin() const { return Base::rbegin(); }
+    ReverseIterator rend() const { return Base::rend(); }
+    Samples *front() const { return *Base::begin(); }
+    void push(lansink::Packet &_packet, bool _bPaused);
+    void push(Samples *_pSamples);
+    void pop();
+    Iterator erase(Iterator _i);
+    Iterator erase(Iterator _iBegin, Iterator _iEnd);
+    void clear();
+
+private:
+    size_t m_cBytesPerSecond = 0;
+    size_t m_cTotalBytes = 0;
+    bool m_bHaveCommands = false;
+
+    Iterator _erase(Iterator _i);
+};
 
 constexpr size_t c_cBaseFramesAdjustmentPacketCount = 20;
 constexpr long c_nBaseFramesAdjustmentThreshold = 10;
@@ -90,7 +124,7 @@ public:
         m_pSink(create_alsa_sink(_log)), m_cStreamId(_cStreamId), m_cFramesWritten(0),
         m_nFramesBase(0), m_pLog(&_log), m_bPaused(false), m_bEmulatedPause(false),
         m_bClosed(false), m_bStarted(false), m_bDraining(false), m_nLastError(0),
-        m_bProcessCommands(false), m_averageDelay(c_cBaseFramesAdjustmentPacketCount)
+        m_averageDelay(c_cBaseFramesAdjustmentPacketCount)
     {
     }
 
@@ -129,7 +163,6 @@ private:
     bool m_bDraining;
     std::condition_variable m_dataAvailable;
     int m_nLastError;
-    bool m_bProcessCommands;
     MovingAverage<long> m_averageDelay;
 
     typedef std::chrono::high_resolution_clock Clock;
@@ -152,6 +185,76 @@ private:
     long _get_buffered_frames();
     long _get_available_frames(bool _bSync);
 };
+
+void SampleQueue::init(size_t _cFrameBytes, size_t _cRate) {
+    m_cBytesPerSecond = _cFrameBytes*_cRate;
+    clear();
+}
+
+void SampleQueue::push(lansink::Packet &_packet, bool _bPaused) {
+    if (_packet.kind() != lansink::Packet_Kind_DATA &&
+            _packet.kind() != lansink::Packet_Kind_CACHE)
+    {
+        if (Base::insert(new Samples(_packet)).second)
+            m_bHaveCommands = true;
+    } else {
+        Samples *const pSamples = new Samples(_packet);
+
+        if (pSamples->bRunning == _bPaused)
+            m_bHaveCommands = true;
+
+        if (Base::insert(pSamples).second)
+            m_cTotalBytes += pSamples->data.size();
+        else
+            delete pSamples;
+    }
+}
+
+void SampleQueue::push(Samples *_pSamples) {
+    if (_pSamples->kind == lansink::Packet_Kind_DATA)
+        m_cTotalBytes += _pSamples->data.size();
+	Base::insert(_pSamples);
+}
+
+void SampleQueue::clear() {
+    m_cTotalBytes = 0;
+    m_bHaveCommands = false;
+    for (Samples *const pSamples : *this)
+        delete pSamples;
+    Base::clear();
+}
+
+void SampleQueue::pop() {
+    _erase(Base::begin());
+}
+
+SampleQueue::Iterator SampleQueue::_erase(Iterator _i) {
+    if ((*_i)->kind == lansink::Packet_Kind_DATA) {
+        assert(m_cTotalBytes >= (*_i)->data.size());
+        m_cTotalBytes -= (*_i)->data.size();
+    }
+    return Base::erase(_i);
+}
+
+SampleQueue::Iterator SampleQueue::erase(Iterator _i) {
+    Samples *const pSamples = front();
+    _i = _erase(_i);
+    delete pSamples;
+    return _i;
+}
+
+SampleQueue::Iterator SampleQueue::erase(
+        Iterator _iBegin, Iterator _iEnd)
+{
+    while (_iBegin != _iEnd)
+        _iBegin = erase(_iBegin);
+    return _iBegin;
+}
+
+size_t SampleQueue::ms() const {
+    assert(m_cBytesPerSecond > 0);
+    return m_cTotalBytes*1000/m_cBytesPerSecond;
+}
 
 Player *Player::Impl::get(lansink::Packet &_packet, Log &_log) {
     std::lock_guard<std::mutex> lock(s_playerMapMutex);
@@ -210,7 +313,6 @@ void Player::Impl::_prepare() {
     if (m_pSink->prepare()) {
         m_cFramesWritten = 0;
         m_nFramesBase = std::numeric_limits<long>::max();
-        m_bProcessCommands = false;
         m_elapsed = Clock::duration(0);
         m_startTime = TimePoint();
         m_lastWrite = TimePoint();
@@ -222,6 +324,7 @@ void Player::Impl::_prepare() {
         m_bClosed = false;
         m_bDraining = false;
         m_averageDelay.clear();
+        m_queue.init(m_pSink->get_frame_bytes(), m_pSink->get_rate());
     }
 }
 
@@ -247,19 +350,7 @@ void Player::Impl::play(lansink::Packet &_packet) {
         m_cFramesWritten = m_nFramesBase;
     }
 
-    if (_packet.kind() != lansink::Packet_Kind_DATA &&
-            _packet.kind() != lansink::Packet_Kind_CACHE)
-    {
-        if (m_queue.insert(new Samples(_packet)).second)
-            m_bProcessCommands = true;
-    } else {
-        Samples *pSamples = new Samples(_packet);
-
-        if (pSamples->bRunning == m_bPaused)
-            m_bProcessCommands = true;
-
-        m_queue.insert(pSamples);
-    }
+    m_queue.push(_packet, m_bPaused);
 
     const std::chrono::minutes mins =
         std::chrono::duration_cast<std::chrono::minutes>(Clock::now() - m_reportTime);
@@ -332,7 +423,7 @@ void Player::Impl::run() {
                         if (m_pSink->is_prepared()) {
                             m_pLog->info("New data after STOP message, reusing stream %llu", m_cStreamId);
                             bPrevPaused = m_bPaused;
-                            m_nFramesBase = (*m_queue.begin())->cTimestamp;
+                            m_nFramesBase = m_queue.front()->cTimestamp;
                             m_cFramesWritten = m_nFramesBase;
                             continue;
                         }
@@ -515,8 +606,7 @@ bool Player::Impl::_handle_commands() {
         iSamples = m_queue.erase(iSamples);
     }
 
-    m_bProcessCommands = false;
-
+    m_queue.clear_commands();
     return !m_bClosed;
 }
 
@@ -559,7 +649,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
     if (!m_queue.empty())
         m_xrunTime = TimePoint();
 
-    if (m_bProcessCommands)
+    if (m_queue.has_commands())
         if (!_handle_commands())
             return;
 
@@ -606,7 +696,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
     const long c_nThreshold = m_pSink->get_period_size();
 
     while (!m_queue.empty() && _cFrames > 0) {
-        Samples *pSamples = *m_queue.begin();
+        Samples *pSamples = m_queue.front();
         const long nNext = pSamples->cTimestamp + pSamples->cOffset;
         const long nPacketDelay = nNext - nPosition;
 
@@ -648,15 +738,15 @@ void Player::Impl::_add_samples(size_t _cFrames) {
                     pSamples->get_frame_count(m_pSink->get_frame_bytes()));
 
             if (cFrames >= pSamples->get_frame_count(m_pSink->get_frame_bytes())) {
+                m_queue.pop();
                 delete pSamples;
-                m_queue.erase(m_queue.begin());
                 continue;
             }
 
             pSamples->cOffset += cFrames;
         }
 
-        m_queue.erase(m_queue.begin());
+        m_queue.pop();
 
         const size_t cWriteSize = std::min(_cFrames, pSamples->get_frame_count(m_pSink->get_frame_bytes()));
 
@@ -681,7 +771,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
         }
 
         if (pSamples->get_frame_count(m_pSink->get_frame_bytes()) > 0)
-            m_queue.insert(pSamples);
+            m_queue.push(pSamples);
         else
             delete pSamples;
     }
