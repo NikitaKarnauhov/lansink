@@ -350,13 +350,19 @@ void Player::Impl::play(lansink::Packet &_packet) {
         m_cFramesWritten = m_nFramesBase;
     }
 
+    if (!m_queue.has_commands() && (int)m_queue.ms() > 1000*g_settings.nBufferedTime) {
+        m_pLog->warning("Discarding queue due to overrun (%u ms queued, %d ms max)",
+                m_queue.ms(), 1000*g_settings.nBufferedTime);
+        m_queue.clear();
+    }
+
     m_queue.push(_packet, m_bPaused);
 
     const std::chrono::minutes mins =
         std::chrono::duration_cast<std::chrono::minutes>(Clock::now() - m_reportTime);
 
     if (mins.count() > 0) {
-        m_pLog->info("%u packets queued", m_queue.size());
+        m_pLog->info("%u packets queued (%u ms)", m_queue.size(), m_queue.ms());
         m_reportTime = Clock::now();
     }
 

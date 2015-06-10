@@ -54,6 +54,7 @@ struct Settings {
     int nRecoveryTimeout = 120;
     int nOpenTimeout = 2000;
     int nBufferedPackets = 10;
+    int nBufferedTime = 600;
     bool bDaemon = false;
     bool bExclusive = false;
 };

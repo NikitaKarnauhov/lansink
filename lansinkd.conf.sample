@@ -28,5 +28,8 @@ open-timeout 2000
 # Number of packets preserved if failed to open device.
 buffered-packets 10
 
+# Maximum amount of data to keep ready for playback (in seconds).
+buffered-packets 600
+
 # Do not try to open device if it is already in use.
 exclusive false

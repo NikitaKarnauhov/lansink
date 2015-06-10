@@ -378,6 +378,7 @@ void _log_settings(Log & _log) {
     _log.info("recovery-timeout = %d", g_settings.nRecoveryTimeout);
     _log.info("open-timeout = %d", g_settings.nOpenTimeout);
     _log.info("buffered-packets = %d", g_settings.nBufferedPackets);
+    _log.info("buffered-time = %d", g_settings.nBufferedTime);
     _log.info("log-path = %s", g_settings.strLogPath.c_str());
     _log.info("pid-path = %s", g_settings.strPIDPath.c_str());
     _log.info("host = %s", g_settings.strHost.c_str());
