@@ -102,7 +102,7 @@ public:
     Samples *front() const { return *Base::begin(); }
     void push(lansink::Packet &_packet, bool _bPaused);
     void push(Samples *_pSamples);
-    void pop();
+    Samples *pop();
     Iterator erase(Iterator _i);
     Iterator erase(Iterator _iBegin, Iterator _iEnd);
     void clear();
@@ -224,8 +224,10 @@ void SampleQueue::clear() {
     Base::clear();
 }
 
-void SampleQueue::pop() {
+Samples *SampleQueue::pop() {
+    Samples *const pSamples = front();
     _erase(Base::begin());
+    return pSamples;
 }
 
 SampleQueue::Iterator SampleQueue::_erase(Iterator _i) {
@@ -531,6 +533,7 @@ void Player::Impl::run() {
                         MilliSeconds ms(std::chrono::duration_cast<MilliSeconds>(Clock::now() - m_lastWrite));
                         m_pLog->warning("XRUN: %d ms since last write", ms.count());
                     } else if (e.is_fatal()) {
+                        std::lock_guard<std::mutex> lock(m_mutex);
                         m_bClosed = true;
                         m_queue.clear();
                     }
@@ -702,7 +705,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
     const long c_nThreshold = m_pSink->get_period_size();
 
     while (!m_queue.empty() && _cFrames > 0) {
-        Samples *pSamples = m_queue.front();
+        Samples *pSamples = m_queue.pop();
         const long nNext = pSamples->cTimestamp + pSamples->cOffset;
         const long nPacketDelay = nNext - nPosition;
 
@@ -734,8 +737,10 @@ void Player::Impl::_add_samples(size_t _cFrames) {
             nPosition += cFrames;
             _cFrames -= cFrames;
 
-            if (_cFrames == 0)
+            if (_cFrames == 0) {
+                m_queue.push(pSamples);
                 break;
+            }
         } else if (nNext + c_nThreshold < nPosition) {
             // Shift offset.
             const size_t cFrames = nPosition - nNext;
@@ -744,15 +749,12 @@ void Player::Impl::_add_samples(size_t _cFrames) {
                     pSamples->get_frame_count(m_pSink->get_frame_bytes()));
 
             if (cFrames >= pSamples->get_frame_count(m_pSink->get_frame_bytes())) {
-                m_queue.pop();
                 delete pSamples;
                 continue;
             }
 
             pSamples->cOffset += cFrames;
         }
-
-        m_queue.pop();
 
         const size_t cWriteSize = std::min(_cFrames, pSamples->get_frame_count(m_pSink->get_frame_bytes()));
 
@@ -772,8 +774,10 @@ void Player::Impl::_add_samples(size_t _cFrames) {
                MilliSeconds ms(std::chrono::duration_cast<MilliSeconds>(Clock::now() - m_lastWrite));
                m_pLog->warning("XRUN: write(), %d ms since last write", ms.count());
                m_pSink->prepare();
-           } else
+           } else {
+               m_queue.push(pSamples);
                throw;
+           }
         }
 
         if (pSamples->get_frame_count(m_pSink->get_frame_bytes()) > 0)
