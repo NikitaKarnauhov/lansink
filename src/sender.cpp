@@ -75,9 +75,9 @@ public:
     size_t get_bytes_per_frame() const;
 
 private:
-    typedef std::chrono::high_resolution_clock Clock;
-    typedef std::chrono::duration<int, std::milli> Duration;
-    typedef std::chrono::time_point<Clock> TimePoint;
+    using Clock = std::chrono::steady_clock;
+    using TimePoint = Clock::time_point;
+    using Duration = std::chrono::milliseconds;
 
     Sender *m_pPlug;
     std::vector<unsigned int> m_formatValues;

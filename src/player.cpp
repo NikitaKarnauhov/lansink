@@ -165,9 +165,9 @@ private:
     int m_nLastError;
     MovingAverage<long> m_averageDelay;
 
-    typedef std::chrono::high_resolution_clock Clock;
-    typedef std::chrono::duration<int, std::milli> MilliSeconds;
-    typedef std::chrono::time_point<Clock> TimePoint;
+    using Clock = Player::Clock;
+    using TimePoint = Player::TimePoint;
+    using MilliSeconds = std::chrono::milliseconds;
 
     TimePoint m_lastWrite, m_startTime, m_reportTime, m_xrunTime;
     Clock::duration m_elapsed;

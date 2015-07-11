@@ -38,7 +38,8 @@
 
 class Player {
 public:
-    typedef std::chrono::high_resolution_clock::time_point TimePoint;
+    using Clock = std::chrono::steady_clock;
+    using TimePoint = Clock::time_point;
 
     ~Player();
 
