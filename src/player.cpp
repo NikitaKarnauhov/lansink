@@ -544,6 +544,7 @@ void Player::Impl::run() {
                 }
             }
         } catch (std::exception &e) {
+            std::lock_guard<std::mutex> lock(m_mutex);
             m_pLog->error(e.what());
             m_pLog->info("Closing stream %llu due to error", m_cStreamId);
             m_pSink->close();
