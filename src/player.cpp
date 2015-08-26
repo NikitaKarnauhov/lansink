@@ -239,7 +239,7 @@ SampleQueue::Iterator SampleQueue::_erase(Iterator _i) {
 }
 
 SampleQueue::Iterator SampleQueue::erase(Iterator _i) {
-    Samples *const pSamples = front();
+    Samples *const pSamples = *_i;
     _i = _erase(_i);
     delete pSamples;
     return _i;
