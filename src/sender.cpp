@@ -102,6 +102,7 @@ private:
     uint64_t m_cStreamId;
     std::atomic_bool m_bStarted;
     bool m_bDraining;
+    mutable WakeupDetector<Clock> m_wakeup;
 
     void _reset(bool _bResetStreamParams);
     std::function<void(void)> _make_worker();
@@ -355,6 +356,14 @@ snd_pcm_sframes_t Sender::Impl::_estimate_frames() const {
     // Wasn't started.
     if (m_startTime == TimePoint())
         return m_nLastFrames;
+
+    if (m_wakeup.check()) {
+        m_pPlug->log.info("Woken up from suspend");
+        m_nLastFrames = m_pPlug->appl_ptr;
+        m_startTime = Clock::now();
+        m_wakeup.reset();
+        return m_nLastFrames;
+    }
 
     Duration ms(std::chrono::duration_cast<Duration>(Clock::now() - m_startTime));
 

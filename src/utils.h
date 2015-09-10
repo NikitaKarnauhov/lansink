@@ -37,6 +37,10 @@
 
 #include <string>
 #include <deque>
+#include <thread>
+#include <mutex>
+#include <atomic>
+#include <condition_variable>
 
 std::string format(size_t _cMaxLength, const char *_strFormat, ...);
 void recv_all(int _cSock, char *_pBuf, size_t _cLen, int _nFlags);
@@ -94,5 +98,78 @@ struct PtrLess {
         return *_pLhs < *_pRhs;
     }
 };
+
+template<class _Clock>
+class WakeupDetector {
+public:
+    WakeupDetector() {
+        _start();
+    }
+
+    ~WakeupDetector() {
+        m_bRunning = false;
+        m_stop.notify_all();
+        if (m_worker.joinable())
+            m_worker.join();
+    }
+
+    bool check() {
+        std::unique_lock<std::mutex> lock(m_mutex);
+        return _check();
+    }
+
+    void reset() {
+        std::unique_lock<std::mutex> lock(m_mutex);
+        _reset();
+    }
+
+private:
+    using Clock = _Clock;
+    using Duration = std::chrono::seconds;
+    using TimePoint = std::chrono::time_point<Clock>;
+
+    static const Duration c_period;
+    static const unsigned c_uThreshold;
+
+    std::thread m_worker;
+    std::condition_variable m_stop;
+    std::mutex m_mutex;
+    TimePoint m_time;
+    std::atomic_bool m_bRunning;
+    bool m_bTriggered = false;
+
+    bool _check() {
+        if (!m_bTriggered && Clock::now() - m_time > c_uThreshold*c_period)
+            m_bTriggered = true;
+        return m_bTriggered;
+    }
+
+    void _reset() {
+        m_bTriggered = false;
+        m_time = Clock::now();
+    }
+
+    void _start() {
+        m_bRunning = false;
+        m_worker = std::thread([&]() {
+            std::unique_lock<std::mutex> lock(m_mutex);
+            _reset();
+            m_bRunning = true;
+            while (!m_stop.wait_for(lock, c_period, [&]() { return !m_bRunning; })) {
+                if (!_check())
+                    m_time = Clock::now();
+            }
+        });
+
+        while (!m_bRunning)
+            std::this_thread::yield();
+    }
+};
+
+template<class _Clock>
+const typename WakeupDetector<_Clock>::Duration WakeupDetector<_Clock>::c_period{1};
+
+template<class _Clock>
+const unsigned WakeupDetector<_Clock>::c_uThreshold{10};
 
 #endif /* LANSINK_UTILS_H_ */
