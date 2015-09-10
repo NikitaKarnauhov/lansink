@@ -43,7 +43,8 @@ public:
 
     ~Player();
 
-    static Player *get(lansink::Packet &_packet, Log &_log, TimePoint &_closeTime);
+    static Player *get(lansink::Packet &_packet, Log &_log, TimePoint &_closeTime,
+            const std::string &_strSender);
     static void remove(Player *_pPlayer);
     static bool remove_stopped(TimePoint &_closeTime);
 
@@ -57,7 +58,7 @@ private:
     class Impl;
     Impl *m_pImpl;
 
-    Player(uint64_t _cStreamId, Log &_log);
+    Player(uint64_t _cStreamId, Log &_log, const std::string &_strSender);
 };
 
 #endif /* LANSINK_PLAYER_H_ */

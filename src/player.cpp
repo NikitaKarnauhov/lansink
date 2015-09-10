@@ -120,9 +120,10 @@ constexpr long c_nBaseFramesAdjustmentThreshold = 10;
 
 class Player::Impl {
 public:
-    Impl(uint64_t _cStreamId, Log &_log) :
+    Impl(uint64_t _cStreamId, Log &_log, const std::string &_strSender) :
         m_pSink(create_alsa_sink(_log)), m_cStreamId(_cStreamId), m_cFramesWritten(0),
-        m_nFramesBase(0), m_pLog(&_log), m_bPaused(false), m_bEmulatedPause(false),
+        m_nFramesBase(0), m_log(_log, LogDecorator{_strSender}),
+        m_bPaused(false), m_bEmulatedPause(false),
         m_bClosed(false), m_bStarted(false), m_bDraining(false), m_nLastError(0),
         m_averageDelay(c_cBaseFramesAdjustmentPacketCount)
     {
@@ -133,7 +134,8 @@ public:
         delete m_pSink;
     }
 
-    static Player *get(lansink::Packet &_packet, Log &_log);
+    static Player *get(lansink::Packet &_packet, Log &_log,
+            const std::string &_strSender);
     static void remove(uint64_t _cId);
     static bool remove_stopped(TimePoint &_closeTime);
 
@@ -155,7 +157,7 @@ private:
     long m_nFramesBase;
     std::thread m_worker;
     mutable std::mutex m_mutex;
-    Log *m_pLog;
+    DecoratedLog m_log;
     bool m_bPaused;
     bool m_bEmulatedPause;
     bool m_bClosed;
@@ -184,6 +186,13 @@ private:
     const Samples *_find_first_data_packet() const;
     long _get_buffered_frames();
     long _get_available_frames(bool _bSync);
+
+    struct LogDecorator {
+        const std::string m_strSender;
+        std::string operator()(const std::string &_strMessage) {
+            return _strMessage + " [" + m_strSender + "] ";
+        }
+    };
 };
 
 void SampleQueue::init(size_t _cFrameBytes, size_t _cRate) {
@@ -258,7 +267,9 @@ size_t SampleQueue::ms() const {
     return m_cTotalBytes*1000/m_cBytesPerSecond;
 }
 
-Player *Player::Impl::get(lansink::Packet &_packet, Log &_log) {
+Player *Player::Impl::get(lansink::Packet &_packet, Log &_log,
+        const std::string &_strSender)
+{
     std::lock_guard<std::mutex> lock(s_playerMapMutex);
 
     auto player = s_players.insert(std::make_pair(_packet.stream(), nullptr));
@@ -269,7 +280,7 @@ Player *Player::Impl::get(lansink::Packet &_packet, Log &_log) {
             return nullptr;
         }
 
-        player.first->second = new Player(_packet.stream(), _log);
+        player.first->second = new Player(_packet.stream(), _log, _strSender);
     }
 
     return player.first->second;
@@ -341,7 +352,7 @@ void Player::Impl::play(lansink::Packet &_packet) {
     if (m_bClosed)
         return;
 
-    m_pLog->debug("Received: version = %u; stream = %llu; kind = %d, format = %s, "
+    m_log.debug("Received: version = %u; stream = %llu; kind = %d, format = %s, "
             "channels = %u; rate = %u; timestamp = %llu; frames = %u",
             _packet.version(), _packet.stream(), _packet.kind(),
             _packet.format().c_str(), _packet.channels(), _packet.rate(), _packet.timestamp(),
@@ -353,7 +364,7 @@ void Player::Impl::play(lansink::Packet &_packet) {
     }
 
     if (!m_queue.has_commands() && (int)m_queue.ms() > 1000*g_settings.nBufferedTime) {
-        m_pLog->warning("Discarding queue due to overrun (%u ms queued, %d ms max)",
+        m_log.warning("Discarding queue due to overrun (%u ms queued, %d ms max)",
                 m_queue.ms(), 1000*g_settings.nBufferedTime);
         m_queue.clear();
     }
@@ -364,7 +375,7 @@ void Player::Impl::play(lansink::Packet &_packet) {
         std::chrono::duration_cast<std::chrono::minutes>(Clock::now() - m_reportTime);
 
     if (mins.count() > 0) {
-        m_pLog->info("%u packets queued (%u ms)", m_queue.size(), m_queue.ms());
+        m_log.info("%u packets queued (%u ms)", m_queue.size(), m_queue.ms());
         m_reportTime = Clock::now();
     }
 
@@ -383,7 +394,7 @@ void Player::Impl::run() {
                 if (m_bStarted && m_bPaused != bPrevPaused) {
                     std::lock_guard<std::mutex> lock(m_mutex);
 
-                    m_pLog->info("%s stream %llu", m_bPaused ? "Pausing" : "Unpausing",
+                    m_log.info("%s stream %llu", m_bPaused ? "Pausing" : "Unpausing",
                             m_cStreamId);
 
                     if (m_pSink->can_be_paused()) {
@@ -392,7 +403,7 @@ void Player::Impl::run() {
 
                         m_pSink->pause(m_bPaused);
                     } else if (m_bPaused) {
-                        m_pLog->warning("Device cannot be paused, emulating pause");
+                        m_log.warning("Device cannot be paused, emulating pause");
                         m_bEmulatedPause = true;
                     } else
                         m_bEmulatedPause = false;
@@ -402,7 +413,7 @@ void Player::Impl::run() {
                     std::lock_guard<std::mutex> lock(m_mutex);
 
                     if (m_bDraining && m_nLastError == 0 && !m_bPaused) {
-                        m_pLog->info("Draining stream %llu", m_cStreamId);
+                        m_log.info("Draining stream %llu", m_cStreamId);
 
                         // Work around pulse_drain() lock up in PulseAudio output module.
                         // ALSA::drain(m_pPcm);
@@ -412,7 +423,7 @@ void Player::Impl::run() {
                                     _get_available_frames(true);
                             const MilliSeconds ms(std::chrono::milliseconds(nFrames*1000/m_pSink->get_rate()));
 
-                            m_pLog->debug("Waiting %llu ms for playback to finish", ms.count());
+                            m_log.debug("Waiting %llu ms for playback to finish", ms.count());
                             std::this_thread::sleep_for(ms);
                         } catch (...) {
                             // Do nothing.
@@ -421,7 +432,7 @@ void Player::Impl::run() {
                         m_bDraining = false;
                     }
 
-                    m_pLog->info("Closing stream %llu", m_cStreamId);
+                    m_log.info("Closing stream %llu", m_cStreamId);
                     m_pSink->close();
 
                     if (!m_queue.empty()) {
@@ -429,7 +440,7 @@ void Player::Impl::run() {
                         _prepare();
 
                         if (m_pSink->is_prepared()) {
-                            m_pLog->info("New data after STOP message, reusing stream %llu", m_cStreamId);
+                            m_log.info("New data after STOP message, reusing stream %llu", m_cStreamId);
                             bPrevPaused = m_bPaused;
                             m_nFramesBase = m_queue.front()->cTimestamp;
                             m_cFramesWritten = m_nFramesBase;
@@ -445,7 +456,7 @@ void Player::Impl::run() {
                 if (m_nLastError < 0) {
                     std::unique_lock<std::mutex> lock(m_mutex);
 
-                    m_pLog->info("Waiting for recovery (timeout %d seconds)",
+                    m_log.info("Waiting for recovery (timeout %d seconds)",
                             g_settings.nRecoveryTimeout);
 
                     if (m_queue.empty())
@@ -454,13 +465,13 @@ void Player::Impl::run() {
                                 [&]() { return !m_queue.empty(); });
 
                     if (m_queue.empty()) {
-                        m_pLog->info("Dropping stream %llu", m_cStreamId);
+                        m_log.info("Dropping stream %llu", m_cStreamId);
                         m_pSink->close();
                         break;
                     }
 
                     // Try to recover if error occurred.
-                    m_pLog->info("Recovering...");
+                    m_log.info("Recovering...");
 
                     m_pSink->recover(m_nLastError);
                     m_nLastError = 0;
@@ -474,7 +485,7 @@ void Player::Impl::run() {
                     if (!m_queue.empty() || !m_bPaused) {
                         long nFrames = _get_available_frames(true);
 
-                        m_pLog->debug("%ld frames can be written", nFrames);
+                        m_log.debug("%ld frames can be written", nFrames);
 
                         // Otherwise fill up initial portion.
                         if (nFrames > 0 && m_cFramesWritten >= 2*m_pSink->get_period_size())
@@ -486,7 +497,7 @@ void Player::Impl::run() {
                             const long nDelay = _get_buffered_frames();
                             long nFrames = _get_available_frames(true);
                             MilliSeconds ms(std::chrono::duration_cast<MilliSeconds>(Clock::now() - m_lastWrite));
-                            m_pLog->debug("Time since last write: %d ms; delay: %ld; available frames: %ld",
+                            m_log.debug("Time since last write: %d ms; delay: %ld; available frames: %ld",
                                     ms.count(), nDelay, nFrames);
                             m_pSink->report_state();
                         }
@@ -494,7 +505,7 @@ void Player::Impl::run() {
 
                         // Check uncaught underruns.
                         if (m_pSink->is_underrun()) {
-                            m_pLog->warning("Uncaught XRUN");
+                            m_log.warning("Uncaught XRUN");
                             m_pSink->prepare();
                             continue;
                         }
@@ -503,7 +514,7 @@ void Player::Impl::run() {
                         m_lastWrite = Clock::now();
 
                         if (m_pSink->is_buffering() && !m_bPaused) {
-                            m_pLog->info("Starting playback (delay: %ld)", _get_buffered_frames());
+                            m_log.info("Starting playback (delay: %ld)", _get_buffered_frames());
                             m_pSink->start();
                             m_bStarted = true;
                             bPrevPaused = false;
@@ -521,17 +532,17 @@ void Player::Impl::run() {
                     MilliSeconds ms((int)nDelay*1000/m_pSink->get_rate());
 
                     if (ms.count() > 0) {
-                        m_pLog->debug("Waiting for data %d ms, %u packets queued, available = %ld, margin = %ld",
+                        m_log.debug("Waiting for data %d ms, %u packets queued, available = %ld, margin = %ld",
                                 ms.count(), m_queue.size(), nAvailableFrames, nMarginFrames);
                         m_dataAvailable.wait_for(lock, ms);
                     } else if (m_queue.empty())
                         std::this_thread::yield();
                 } catch (Sink::Error &e) {
-                    m_pLog->warning(e.what());
+                    m_log.warning(e.what());
 
                     if (e.is_underrun()) {
                         MilliSeconds ms(std::chrono::duration_cast<MilliSeconds>(Clock::now() - m_lastWrite));
-                        m_pLog->warning("XRUN: %d ms since last write", ms.count());
+                        m_log.warning("XRUN: %d ms since last write", ms.count());
                     } else if (e.is_fatal()) {
                         std::lock_guard<std::mutex> lock(m_mutex);
                         m_bClosed = true;
@@ -545,8 +556,8 @@ void Player::Impl::run() {
             }
         } catch (std::exception &e) {
             std::lock_guard<std::mutex> lock(m_mutex);
-            m_pLog->error(e.what());
-            m_pLog->info("Closing stream %llu due to error", m_cStreamId);
+            m_log.error(e.what());
+            m_log.info("Closing stream %llu due to error", m_cStreamId);
             m_pSink->close();
             m_bClosed = true;
             m_queue.clear();
@@ -624,7 +635,7 @@ void Player::Impl::_add_silence(size_t _cFrames) {
     size_t cPosition = 0;
 
     if (_cFrames > 0)
-        m_pLog->debug("Inserting silence: %lu frames", _cFrames);
+        m_log.debug("Inserting silence: %lu frames", _cFrames);
 
     while (cPosition < _cFrames)
         try {
@@ -638,7 +649,7 @@ void Player::Impl::_add_silence(size_t _cFrames) {
         } catch (Sink::Error &e) {
            if (e.is_underrun()) {
                MilliSeconds ms(std::chrono::duration_cast<MilliSeconds>(Clock::now() - m_lastWrite));
-               m_pLog->warning("XRUN: write(), %d ms since last write", ms.count());
+               m_log.warning("XRUN: write(), %d ms since last write", ms.count());
                m_pSink->prepare();
            } else
                throw;
@@ -679,7 +690,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
                 if (seconds.count() > g_settings.nRecoveryTimeout)
                     throw RuntimeError("No data for %ld seconds", seconds.count());
             } else {
-                m_pLog->warning("Avoiding underrun (%lu frames max, timeout %d seconds)",
+                m_log.warning("Avoiding underrun (%lu frames max, timeout %d seconds)",
                         _cFrames, g_settings.nRecoveryTimeout);
                 m_xrunTime = Clock::now();
             }
@@ -710,7 +721,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
         const long nNext = pSamples->cTimestamp + pSamples->cOffset;
         const long nPacketDelay = nNext - nPosition;
 
-        m_pLog->debug("Processing packet: timestamp = %d, offset = %lu, position = %ld, "
+        m_log.debug("Processing packet: timestamp = %d, offset = %lu, position = %ld, "
                 "packet delay = %ld, average delay = %.2f", pSamples->cTimestamp,
                 pSamples->cOffset, nPosition, nPacketDelay, m_averageDelay.get());
 
@@ -721,7 +732,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
                     std::abs(m_averageDelay.get()) > c_nBaseFramesAdjustmentThreshold)
             {
                 const long nAdjustment = m_averageDelay.get();
-                m_pLog->debug("Adjusting base frame count: %ld", nAdjustment);
+                m_log.debug("Adjusting base frame count: %ld", nAdjustment);
                 m_nFramesBase += nAdjustment;
                 nPosition += nAdjustment;
                 m_averageDelay.clear();
@@ -732,7 +743,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
             // Pad with silence.
             const size_t cFrames = std::min<size_t>(nNext - nPosition, _cFrames);
 
-            m_pLog->warning("Padding till %ld (%lu frames max)", nNext, _cFrames);
+            m_log.warning("Padding till %ld (%lu frames max)", nNext, _cFrames);
             _add_silence(cFrames);
             m_cFramesWritten += cFrames;
             nPosition += cFrames;
@@ -746,7 +757,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
             // Shift offset.
             const size_t cFrames = nPosition - nNext;
 
-            m_pLog->warning("Shifting offset till %ld (%lu frames max)", nPosition,
+            m_log.warning("Shifting offset till %ld (%lu frames max)", nPosition,
                     pSamples->get_frame_count(m_pSink->get_frame_bytes()));
 
             if (cFrames >= pSamples->get_frame_count(m_pSink->get_frame_bytes())) {
@@ -759,7 +770,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
 
         const size_t cWriteSize = std::min(_cFrames, pSamples->get_frame_count(m_pSink->get_frame_bytes()));
 
-        m_pLog->debug("Inserting audio: %lu, %lu (%ld)",
+        m_log.debug("Inserting audio: %lu, %lu (%ld)",
                 pSamples->cTimestamp + pSamples->cOffset, cWriteSize, nPosition);
 
         try {
@@ -773,7 +784,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
         } catch (Sink::Error &e) {
            if (e.is_underrun()) {
                MilliSeconds ms(std::chrono::duration_cast<MilliSeconds>(Clock::now() - m_lastWrite));
-               m_pLog->warning("XRUN: write(), %d ms since last write", ms.count());
+               m_log.warning("XRUN: write(), %d ms since last write", ms.count());
                m_pSink->prepare();
            } else {
                m_queue.push(pSamples);
@@ -791,17 +802,21 @@ void Player::Impl::_add_samples(size_t _cFrames) {
 Player::Impl::Players Player::Impl::s_players{};
 std::mutex Player::Impl::s_playerMapMutex{};
 
-Player::Player(uint64_t _cStreamId, Log &_log) : m_pImpl(new Impl(_cStreamId, _log)) {
+Player::Player(uint64_t _cStreamId, Log &_log, const std::string &_strSender) :
+        m_pImpl(new Impl(_cStreamId, _log, _strSender))
+{
 }
 
 Player::~Player() {
     delete m_pImpl;
 }
 
-Player *Player::get(lansink::Packet &_packet, Log &_log, TimePoint &_closeTime) {
+Player *Player::get(lansink::Packet &_packet, Log &_log, TimePoint &_closeTime,
+        const std::string &_strSender)
+{
     if (!Player::remove_stopped(_closeTime))
         return nullptr;
-    return Impl::get(_packet, _log);
+    return Impl::get(_packet, _log, _strSender);
 }
 
 void Player::remove(Player *_pPlayer) {

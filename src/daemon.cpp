@@ -287,10 +287,10 @@ void _main(Log &_log, bool &_bPIDWritten) {
                     throw SystemError("recvfrom()");
 
                 lansink::Packet &packet = *packets.emplace(packets.end());
+                const std::string strSender = _in_addr_to_string((struct sockaddr *)&sender);
 
                 if (!packet.ParseFromArray(pBuf.get(), nPacketSize)) {
-                    _log.warning("Broken packet from %s",
-                            _in_addr_to_string((struct sockaddr *)&sender).c_str());
+                    _log.warning("Broken packet from %s", strSender.c_str());
                     packets.pop_back();
                     continue;
                 }
@@ -306,18 +306,16 @@ void _main(Log &_log, bool &_bPIDWritten) {
                 }
 
                 Player::TimePoint errorTime;
-                Player *pPlayer = Player::get(packet, _log, errorTime);
+                Player *pPlayer = Player::get(packet, _log, errorTime, strSender);
 
                 if (!pPlayer) {
-                    _log.info("Dropping connection from %s: device is busy",
-                            _in_addr_to_string((struct sockaddr *)&sender).c_str());
+                    _log.info("Dropping connection from %s: device is busy", strSender.c_str());
                     m_lastOpenAttempt = TimePoint(errorTime.time_since_epoch());
                     continue;
                 }
 
                 if (!pPlayer->is_prepared()) {
-                    _log.info("New connection from %s",
-                            _in_addr_to_string((struct sockaddr *)&sender).c_str());
+                    _log.info("New connection from %s", strSender.c_str());
                     pPlayer->init(packet);
 
                     if (pPlayer->is_prepared()) {

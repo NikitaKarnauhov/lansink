@@ -49,7 +49,8 @@ public:
     void open(const std::string &_strFilename);
     void close(const std::string &_strFilename);
 
-    void log(LogLevel _level, const std::string &_strMessage);
+    void log(LogLevel _level, const Decorator &_decorator,
+            const std::string &_strMessage);
 
 private:
     std::mutex m_mutex;
@@ -91,7 +92,9 @@ void Log::Impl::close(const std::string &_strFilename) {
     }
 }
 
-void Log::Impl::log(LogLevel _level, const std::string &_strMessage) {
+void Log::Impl::log(LogLevel _level, const Decorator &_decorator,
+        const std::string &_strMessage)
+{
     std::lock_guard<std::mutex> lock(m_mutex);
 
     if (m_level == llSilent || _level > m_level)
@@ -130,7 +133,7 @@ void Log::Impl::log(LogLevel _level, const std::string &_strMessage) {
             break;
     }
 
-    std::list<std::string> messages{{strLevel + _strMessage}};
+    std::list<std::string> messages{{strLevel + _decorator(_strMessage)}};
 
     while (!messages.empty()) {
         for (auto &stream : m_streams) {
@@ -175,11 +178,15 @@ void Log::setLevel(LogLevel _ll) {
     m_pImpl->m_level = _ll;
 }
 
-void Log::log(LogLevel _level, const std::string &_strMessage) {
-    m_pImpl->log(_level, _strMessage);
+void Log::log(LogLevel _level, const Decorator &_decorator,
+        const std::string &_strMessage)
+{
+    m_pImpl->log(_level, _decorator, _strMessage);
 }
 
-void Log::log(LogLevel _level, const char *_strFormat, ...) {
+void Log::log(LogLevel _level, const Decorator &_decorator,
+        const char *_strFormat, ...)
+{
     constexpr size_t c_cMaxLength = 1024;
     char str[c_cMaxLength];
     va_list args;
@@ -188,7 +195,7 @@ void Log::log(LogLevel _level, const char *_strFormat, ...) {
     str[c_cMaxLength - 1] = 0;
     vsnprintf(str, c_cMaxLength - 1, _strFormat, args);
     va_end (args);
-    m_pImpl->log(_level, str);
+    m_pImpl->log(_level, _decorator, str);
 }
 
 LogLevel Log::getLevel() const {

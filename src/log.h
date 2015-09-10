@@ -33,6 +33,7 @@
 #define LANSINK_LOG_H_
 
 #include <string>
+#include <functional>
 
 enum LogLevel {
     llSilent,
@@ -56,29 +57,90 @@ public:
     void setLevel(LogLevel _ll);
     LogLevel getLevel() const;
 
-    void log(LogLevel _level, const std::string &_strMessage);
-    void log(LogLevel _level, const char *_strFormat, ...);
+    using Decorator = std::function<std::string(const std::string &)>;
 
-#define LOG_LEVEL(_NAME, _LEVEL)                            \
-    void _NAME(const std::string &_strMessage) {            \
-        if (getLevel() > llSilent && _LEVEL <= getLevel())  \
-            log(_LEVEL, _strMessage);                       \
-    }                                                       \
-                                                            \
-    template<typename... Args>                              \
-    void _NAME(const char *_strFormat, Args... _args) {     \
-        if (getLevel() > llSilent && _LEVEL <= getLevel())  \
-            log(_LEVEL, _strFormat, _args...);              \
+    static std::string emptyDecorator(const std::string &_str) {
+        return _str;
+    }
+
+    void log(LogLevel _level, const Decorator &_decorator,
+            const std::string &_strMessage);
+    void log(LogLevel _level, const Decorator &_decorator,
+            const char *_strFormat, ...);
+
+#define LOG_LEVEL(_NAME, _LEVEL)                                \
+    void _NAME(const std::string &_strMessage) {                \
+        if (getLevel() > llSilent && _LEVEL <= getLevel())      \
+            log(_LEVEL, emptyDecorator, _strMessage);           \
+    }                                                           \
+                                                                \
+    void _NAME(const Decorator &_decorator,                     \
+            const std::string &_strMessage)                     \
+    {                                                           \
+        if (getLevel() > llSilent && _LEVEL <= getLevel())      \
+            log(_LEVEL, _decorator, _strMessage);               \
+    }                                                           \
+                                                                \
+    template<typename... Args>                                  \
+    void _NAME(const char *_strFormat, Args... _args) {         \
+        if (getLevel() > llSilent && _LEVEL <= getLevel())      \
+            log(_LEVEL, emptyDecorator, _strFormat, _args...);  \
+    }                                                           \
+                                                                \
+    template<typename... Args>                                  \
+    void _NAME(const Decorator &_decorator,                     \
+            const char *_strFormat, Args... _args)              \
+    {                                                           \
+        if (getLevel() > llSilent && _LEVEL <= getLevel())      \
+            log(_LEVEL, _decorator, _strFormat, _args...);      \
     }
 
     LOG_LEVEL(error, llError);
     LOG_LEVEL(warning, llWarning);
     LOG_LEVEL(info, llInfo);
     LOG_LEVEL(debug, llDebug);
+#undef LOG_LEVEL
 
 private:
     class Impl;
     Impl *m_pImpl;
+};
+
+class DecoratedLog {
+public:
+    DecoratedLog(Log &_log, const Log::Decorator &_decorator) :
+        m_log(_log), m_decorator(_decorator)
+    {
+    }
+
+    void log(LogLevel _level, const std::string &_strMessage) {
+        m_log.log(_level, m_decorator, _strMessage);
+    }
+
+    template<typename... Args>
+    void log(LogLevel _level, const char *_strFormat, Args... _args) {
+        m_log.log(m_decorator, _strFormat, _args...);
+    }
+
+#define WRAP(_NAME)                                     \
+    void _NAME(const std::string &_strMessage) {        \
+        m_log._NAME(m_decorator, _strMessage);          \
+    }                                                   \
+                                                        \
+    template<typename... Args>                          \
+    void _NAME(const char *_strFormat, Args... _args) { \
+        m_log._NAME(m_decorator, _strFormat, _args...); \
+    }
+
+    WRAP(error);
+    WRAP(warning);
+    WRAP(info);
+    WRAP(debug);
+#undef WRAP
+
+private:
+    Log &m_log;
+    const Log::Decorator m_decorator;
 };
 
 #endif /* LANSINK_LOG_H_ */
