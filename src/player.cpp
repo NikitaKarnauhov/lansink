@@ -178,7 +178,7 @@ private:
     static Players s_players;
     static std::mutex s_playerMapMutex;
 
-    void _prepare();
+    void _prepare(bool _bDiscardQueue = true);
     void _add_samples(size_t _cFrames);
     void _add_silence(size_t _cFrames);
     bool _handle_commands();
@@ -322,7 +322,7 @@ bool Player::Impl::remove_stopped(TimePoint &_closeTime) {
     return bNoErrors;
 }
 
-void Player::Impl::_prepare() {
+void Player::Impl::_prepare(bool _bDiscardQueue /*= true*/) {
     if (m_pSink->prepare()) {
         m_cFramesWritten = 0;
         m_nFramesBase = std::numeric_limits<long>::max();
@@ -337,7 +337,9 @@ void Player::Impl::_prepare() {
         m_bClosed = false;
         m_bDraining = false;
         m_averageDelay.clear();
-        m_queue.init(m_pSink->get_frame_bytes(), m_pSink->get_rate());
+
+        if (_bDiscardQueue)
+            m_queue.init(m_pSink->get_frame_bytes(), m_pSink->get_rate());
     }
 }
 
@@ -437,7 +439,7 @@ void Player::Impl::run() {
 
                     if (!m_queue.empty()) {
                         // Already got new data from the stream, probably a rewind happened.
-                        _prepare();
+                        _prepare(false);
 
                         if (m_pSink->is_prepared()) {
                             m_log.info("New data after STOP message, reusing stream %llu", m_cStreamId);
