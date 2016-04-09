@@ -157,7 +157,7 @@ private:
     long m_nFramesBase;
     std::thread m_worker;
     mutable std::mutex m_mutex;
-    DecoratedLog m_log;
+    mutable DecoratedLog m_log;
     bool m_bPaused;
     bool m_bEmulatedPause;
     bool m_bClosed;
@@ -184,8 +184,9 @@ private:
     bool _handle_commands();
     bool _handle_command(lansink::Packet_Kind _kind, Samples *_pPacket);
     const Samples *_find_first_data_packet() const;
-    long _get_buffered_frames();
-    long _get_available_frames(bool _bSync);
+    long _get_buffered_frames() const;
+    long _get_available_frames(bool _bSync) const;
+    long _estimate_position() const;
 
     struct LogDecorator {
         const std::string m_strSender;
@@ -658,12 +659,30 @@ void Player::Impl::_add_silence(size_t _cFrames) {
         }
 }
 
-long Player::Impl::_get_buffered_frames() {
+long Player::Impl::_get_buffered_frames() const {
     return m_pSink->get_delay();
 }
 
-long Player::Impl::_get_available_frames(bool _bSync) {
+long Player::Impl::_get_available_frames(bool _bSync) const {
     return m_pSink->get_avail(_bSync);
+}
+
+long Player::Impl::_estimate_position() const {
+    Clock::duration position = m_elapsed;
+
+    if (!m_bPaused)
+        position += (Clock::now() - m_startTime);
+
+    // FIXME pulse sink returns unrealistic delays (avail() results are even less realistic).
+    const long nDelay = _get_buffered_frames();
+    using Period = Clock::duration::period;
+    const long nPosition = nDelay + m_nFramesBase +
+            m_pSink->get_rate()*position.count()*Period::num/Period::den;
+
+    m_log.debug("Frames written = %lu, frames base = %ld, delay = %ld",
+            m_cFramesWritten, m_nFramesBase, nDelay);
+
+    return nPosition;
 }
 
 void Player::Impl::_add_samples(size_t _cFrames) {
@@ -704,16 +723,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
         return;
     }
 
-    Clock::duration position = m_elapsed;
-
-    if (!m_bPaused)
-        position += (Clock::now() - m_startTime);
-
-    // FIXME pulse sink returns unrealistic delays (avail() results are even less realistic).
-    const long nDelay = _get_buffered_frames();
-    typedef Clock::duration::period Period;
-    long nPosition = nDelay + m_nFramesBase +
-            m_pSink->get_rate()*position.count()*Period::num/Period::den;
+    long nPosition = _estimate_position();
 
     // Work around latency introduced by program execution.
     const long c_nThreshold = m_pSink->get_period_size();
