@@ -37,6 +37,7 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
+#include <cmath>
 
 #include "utils.h"
 #include "sink.h"
@@ -115,7 +116,7 @@ private:
     Iterator _erase(Iterator _i);
 };
 
-constexpr size_t c_cBaseFramesAdjustmentPacketCount = 20;
+constexpr size_t c_cAveragePacketCount = 20;
 constexpr long c_nBaseFramesAdjustmentThreshold = 10;
 
 class Player::Impl {
@@ -126,7 +127,8 @@ public:
         m_log(_log, LogDecorator{_strSender}),
         m_bPaused(false), m_bEmulatedPause(false),
         m_bClosed(false), m_bStarted(false), m_bDraining(false), m_nLastError(0),
-        m_averageDelay(c_cBaseFramesAdjustmentPacketCount)
+        m_averageDelay(c_cAveragePacketCount),
+        m_averageSize(c_cAveragePacketCount)
     {
     }
 
@@ -169,6 +171,7 @@ private:
     std::condition_variable m_dataAvailable;
     int m_nLastError;
     MovingAverage<long> m_averageDelay;
+    MovingAverage<long> m_averageSize;
     LostPacketDetector m_lostPacketDetector;
     size_t m_cFramesPadding = 0;
     size_t m_cFramesSkipped = 0;
@@ -348,6 +351,7 @@ void Player::Impl::_prepare(bool _bDiscardQueue /*= true*/) {
         m_bClosed = false;
         m_bDraining = false;
         m_averageDelay.clear();
+        m_averageSize.clear();
 
         if (_bDiscardQueue)
             m_queue.init(m_pSink->get_frame_bytes(), m_pSink->get_rate());
@@ -786,6 +790,10 @@ void Player::Impl::_add_samples(size_t _cFrames) {
         if (!m_bPaused) {
             _cFrames = std::max<size_t>(m_pSink->get_period_size(), _cFrames);
 
+            if (m_averageSize.is_full())
+                _cFrames = std::min<size_t>(_cFrames, std::ceil(
+                        m_averageSize.get()/m_pSink->get_frame_bytes()));
+
             if (m_xrunTime != TimePoint()) {
                 const auto seconds(std::chrono::duration_cast<std::chrono::seconds>(
                         Clock::now() - m_xrunTime));
@@ -820,6 +828,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
 
         if (!m_bPaused) {
             m_averageDelay.add(nPacketDelay);
+            m_averageSize.add(pSamples->data.size());
 
             if (m_averageDelay.is_full() &&
                     std::abs(m_averageDelay.get()) > c_nBaseFramesAdjustmentThreshold)
