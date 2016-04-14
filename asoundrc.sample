@@ -15,7 +15,8 @@ pcm.lansink {
     format [ U8 S16_LE S16_BE S32_LE S32_BE FLOAT_LE FLOAT_BE MU_LAW A_LAW ]
 
     # Largest packet size. See ifconfig(8).
-    mtu 1500
+    # Set it slightly below reported MTU to avoid packet loss.
+    mtu 1400
 
     # Send queued data period in milliseconds.
     send_period 10

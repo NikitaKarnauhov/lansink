@@ -581,7 +581,7 @@ size_t Sender::Impl::get_bytes_per_frame() const {
 }
 
 Sender::Sender() :
-        strHost("127.0.0.1"), nPort(26751), nMTU(1500), nSendPeriod(10), m_pImpl(new Impl(this))
+        strHost("127.0.0.1"), nPort(26751), nMTU(1400), nSendPeriod(10), m_pImpl(new Impl(this))
 {
 }
 
