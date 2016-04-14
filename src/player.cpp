@@ -169,6 +169,10 @@ private:
     std::condition_variable m_dataAvailable;
     int m_nLastError;
     MovingAverage<long> m_averageDelay;
+    LostPacketDetector m_lostPacketDetector;
+    size_t m_cFramesPadding = 0;
+    size_t m_cFramesSkipped = 0;
+    size_t m_cPacketsSkipped = 0;
 
     using Clock = Player::Clock;
     using TimePoint = Player::TimePoint;
@@ -191,6 +195,8 @@ private:
     long _estimate_position();
     void _add_frames_written(long _nFrames);
     void _set_frames_written(long _nFrames);
+    void _log_stats();
+    void _add_stats(const lansink::Packet &_packet);
 
     struct LogDecorator {
         const std::string m_strSender;
@@ -353,6 +359,48 @@ void Player::Impl::init(lansink::Packet &_packet) {
     _prepare();
 }
 
+void Player::Impl::_log_stats() {
+    const size_t cFrameBytes = m_pSink->get_frame_bytes();
+
+    if (!m_lostPacketDetector.empty()) {
+        const auto stats = m_lostPacketDetector.collect();
+        m_log.info("Received: %u packets; %u frames; %u bytes",
+                stats.cPackets, stats.cSize, stats.cSize*cFrameBytes);
+        m_log.info("Lost: %u packets; %u frames; %u bytes",
+                stats.cPacketsLost, stats.cSizeLost,
+                stats.cSizeLost*cFrameBytes);
+        m_log.info("Duplicates: %u packets; %u frames; %u bytes",
+                stats.cPacketsDuplicated, stats.cSizeDuplicated,
+                stats.cSizeDuplicated*cFrameBytes);
+        m_log.info("Overlaps: %u packets; %u frames; %u bytes",
+                stats.cPacketsOverlapped, stats.cSizeOverlapped,
+                stats.cSizeOverlapped*cFrameBytes);
+    }
+
+    m_log.info("Skipped: %u packets; %u frames; %u bytes",
+            m_cPacketsSkipped, m_cFramesSkipped,
+            m_cFramesSkipped*cFrameBytes);
+    m_log.info("Padding: %u frames; %u bytes",
+            m_cFramesPadding, m_cFramesPadding*cFrameBytes);
+    m_cFramesPadding = 0;
+    m_cFramesSkipped = 0;
+    m_cPacketsSkipped = 0;
+}
+
+void Player::Impl::_add_stats(const lansink::Packet &_packet) {
+    const size_t cFrameBytes = m_pSink->get_frame_bytes();
+
+    if (m_lostPacketDetector.empty()) {
+        const size_t cBytesPerMinute = m_pSink->get_rate()*61*cFrameBytes;
+        const size_t cBytesPerPacket = std::max<size_t>(
+                1024, _packet.samples().size());
+        m_lostPacketDetector.reserve(cBytesPerMinute/cBytesPerPacket);
+    }
+
+    m_lostPacketDetector.add(_packet.timestamp(),
+            _packet.samples().size()/cFrameBytes);
+}
+
 void Player::Impl::play(lansink::Packet &_packet) {
     std::lock_guard<std::mutex> lock(m_mutex);
 
@@ -360,10 +408,10 @@ void Player::Impl::play(lansink::Packet &_packet) {
         return;
 
     m_log.debug("Received: version = %u; stream = %llu; kind = %d, format = %s, "
-            "channels = %u; rate = %u; timestamp = %llu; frames = %u",
+            "channels = %u; rate = %u; timestamp = %llu; bytes = %u",
             _packet.version(), _packet.stream(), _packet.kind(),
-            _packet.format().c_str(), _packet.channels(), _packet.rate(), _packet.timestamp(),
-            _packet.samples().size());
+            _packet.format().c_str(), _packet.channels(), _packet.rate(),
+            _packet.timestamp(), _packet.samples().size());
 
     if (!m_bStarted) {
         m_nFramesBase = std::min<long>(_packet.timestamp(), m_nFramesBase);
@@ -378,6 +426,9 @@ void Player::Impl::play(lansink::Packet &_packet) {
         m_queue.clear();
     }
 
+    if (_packet.kind() == _packet.DATA || _packet.kind() == _packet.CACHE)
+        _add_stats(_packet);
+
     m_queue.push(_packet, m_bPaused);
 
     const std::chrono::minutes mins =
@@ -385,6 +436,7 @@ void Player::Impl::play(lansink::Packet &_packet) {
 
     if (mins.count() > 0) {
         m_log.info("%u packets queued (%u ms)", m_queue.size(), m_queue.ms());
+        _log_stats();
         m_reportTime = Clock::now();
     }
 
@@ -642,10 +694,12 @@ bool Player::Impl::_handle_commands() {
 }
 
 void Player::Impl::_add_silence(size_t _cFrames) {
+    if (_cFrames == 0)
+        return;
+
     size_t cPosition = 0;
 
-    if (_cFrames > 0)
-        m_log.debug("Inserting silence: %lu frames", _cFrames);
+    m_log.debug("Inserting silence: %lu frames", _cFrames);
 
     while (cPosition < _cFrames)
         try {
@@ -744,6 +798,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
             }
 
             _add_silence(_cFrames);
+            m_cFramesPadding += _cFrames;
         }
 
         return;
@@ -783,6 +838,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
 
             m_log.warning("Padding till %ld (%lu frames max)", nNext, _cFrames);
             _add_silence(cFrames);
+            m_cFramesPadding += cFrames;
             nPosition += cFrames;
             _cFrames -= cFrames;
 
@@ -793,16 +849,22 @@ void Player::Impl::_add_samples(size_t _cFrames) {
         } else if (nNext + c_nThreshold < nPosition) {
             // Shift offset.
             const size_t cFrames = nPosition - nNext;
+            const size_t cFramesPacket = pSamples->get_frame_count(
+                    m_pSink->get_frame_bytes());
 
-            m_log.warning("Shifting offset till %ld (%lu frames max)", nPosition,
-                    pSamples->get_frame_count(m_pSink->get_frame_bytes()));
+            m_log.warning("Shifting offset till %ld (%lu frames max)",
+                    nPosition, cFramesPacket);
 
-            if (cFrames >= pSamples->get_frame_count(m_pSink->get_frame_bytes())) {
+            if (cFrames >= cFramesPacket) {
+                m_cFramesSkipped += cFramesPacket;
+                if (pSamples->cOffset == 0)
+                    ++m_cPacketsSkipped;
                 delete pSamples;
                 continue;
             }
 
             pSamples->cOffset += cFrames;
+            m_cFramesSkipped += cFrames;
         }
 
         const size_t cWriteSize = std::min(_cFrames, pSamples->get_frame_count(m_pSink->get_frame_bytes()));

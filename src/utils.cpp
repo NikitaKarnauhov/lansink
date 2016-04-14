@@ -116,3 +116,32 @@ void sendto_all(int _cSock, const char *_pBuf, size_t _cLen, int _nFlags,
         _pBuf += nSent;
     } while (_cLen > 0);
 }
+
+auto LostPacketDetector::collect() -> Stats {
+    Stats stats;
+    std::sort(m_records.begin(), m_records.end());
+    if (m_records.empty())
+        return stats;
+    stats.cPackets = 1;
+    stats.cSize = m_records.front().cSize;
+    for (size_t c = 1; c < m_records.size(); ++c) {
+        const Record & prev = m_records[c - 1],
+                & cur = m_records[c];
+        if (cur.nOffset == prev.nOffset && cur.cSize == prev.cSize) {
+            ++stats.cPacketsDuplicated;
+            stats.cSizeDuplicated += cur.cSize;
+        } else {
+            ++stats.cPackets;
+            stats.cSize += cur.cSize;
+            if (cur.nOffset > prev.nOffset + (long)prev.cSize) {
+                ++stats.cPacketsLost;
+                stats.cSizeLost += cur.nOffset - prev.nOffset - prev.cSize;
+            } else if (cur.nOffset < prev.nOffset + (long)prev.cSize) {
+                ++stats.cPacketsOverlapped;
+                stats.cSizeOverlapped += prev.nOffset + prev.cSize - cur.nOffset;
+            }
+        }
+    }
+    m_records.clear();
+    return stats;
+}

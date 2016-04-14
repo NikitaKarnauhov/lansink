@@ -33,10 +33,12 @@
 #define LANSINK_UTILS_H_
 
 #include <sys/socket.h>
-#include <assert.h>
 
+#include <cassert>
 #include <string>
 #include <deque>
+#include <vector>
+#include <algorithm>
 #include <thread>
 #include <mutex>
 #include <atomic>
@@ -171,5 +173,47 @@ const typename WakeupDetector<_Clock>::Duration WakeupDetector<_Clock>::c_period
 
 template<class _Clock>
 const unsigned WakeupDetector<_Clock>::c_uThreshold{10};
+
+class LostPacketDetector {
+public:
+    void reserve(size_t _cReservedRecords) {
+        m_records.reserve(_cReservedRecords);
+    }
+
+    void add(long _nOffset, size_t _cSize) {
+        m_records.emplace_back(_nOffset, _cSize);
+    }
+
+    struct Stats {
+        size_t cPackets = 0;
+        size_t cPacketsLost = 0;
+        size_t cPacketsDuplicated = 0;
+        size_t cPacketsOverlapped = 0;
+        size_t cSize = 0;
+        size_t cSizeLost = 0;
+        size_t cSizeDuplicated = 0;
+        size_t cSizeOverlapped = 0;
+    };
+
+    Stats collect();
+
+    bool empty() const { return m_records.empty(); }
+
+private:
+    struct Record {
+        long nOffset = 0;
+        size_t cSize = 0;
+
+        Record() = default;
+
+        Record(long _nOffset, size_t _cSize) : nOffset(_nOffset), cSize(_cSize) {}
+
+        bool operator <(const Record & _other) const {
+            return nOffset < _other.nOffset;
+        }
+    };
+
+    std::vector<Record> m_records;
+};
 
 #endif /* LANSINK_UTILS_H_ */
