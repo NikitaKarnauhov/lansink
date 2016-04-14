@@ -121,8 +121,9 @@ constexpr long c_nBaseFramesAdjustmentThreshold = 10;
 class Player::Impl {
 public:
     Impl(uint64_t _cStreamId, Log &_log, const std::string &_strSender) :
-        m_pSink(create_alsa_sink(_log)), m_cStreamId(_cStreamId), m_cFramesWritten(0),
-        m_nFramesBase(0), m_log(_log, LogDecorator{_strSender}),
+        m_pSink(create_alsa_sink(_log)), m_cStreamId(_cStreamId), m_nFramesWritten(-1),
+        m_nFramesBase(0), m_nLastFramesBuffered(0), m_nLastFramesWritten(0),
+        m_log(_log, LogDecorator{_strSender}),
         m_bPaused(false), m_bEmulatedPause(false),
         m_bClosed(false), m_bStarted(false), m_bDraining(false), m_nLastError(0),
         m_averageDelay(c_cBaseFramesAdjustmentPacketCount)
@@ -153,8 +154,10 @@ private:
     Sink *m_pSink;
     uint64_t m_cStreamId;
     SampleQueue m_queue;
-    size_t m_cFramesWritten;
+    long m_nFramesWritten;
     long m_nFramesBase;
+    long m_nLastFramesBuffered;
+    long m_nLastFramesWritten;
     std::thread m_worker;
     mutable std::mutex m_mutex;
     mutable DecoratedLog m_log;
@@ -171,8 +174,7 @@ private:
     using TimePoint = Player::TimePoint;
     using MilliSeconds = std::chrono::milliseconds;
 
-    TimePoint m_lastWrite, m_startTime, m_reportTime, m_xrunTime;
-    Clock::duration m_elapsed;
+    TimePoint m_lastWrite, m_reportTime, m_xrunTime;
 
     typedef std::map<uint64_t, Player *> Players;
     static Players s_players;
@@ -186,7 +188,9 @@ private:
     const Samples *_find_first_data_packet() const;
     long _get_buffered_frames() const;
     long _get_available_frames(bool _bSync) const;
-    long _estimate_position() const;
+    long _estimate_position();
+    void _add_frames_written(long _nFrames);
+    void _set_frames_written(long _nFrames);
 
     struct LogDecorator {
         const std::string m_strSender;
@@ -325,10 +329,10 @@ bool Player::Impl::remove_stopped(TimePoint &_closeTime) {
 
 void Player::Impl::_prepare(bool _bDiscardQueue /*= true*/) {
     if (m_pSink->prepare()) {
-        m_cFramesWritten = 0;
+        m_nFramesWritten = 0;
         m_nFramesBase = std::numeric_limits<long>::max();
-        m_elapsed = Clock::duration(0);
-        m_startTime = TimePoint();
+        m_nLastFramesBuffered = 0;
+        m_nLastFramesWritten = 0;
         m_lastWrite = TimePoint();
         m_xrunTime = TimePoint();
         m_reportTime = Clock::now();
@@ -363,7 +367,9 @@ void Player::Impl::play(lansink::Packet &_packet) {
 
     if (!m_bStarted) {
         m_nFramesBase = std::min<long>(_packet.timestamp(), m_nFramesBase);
-        m_cFramesWritten = m_nFramesBase;
+        m_nFramesWritten = 0;
+        m_nLastFramesBuffered = 0;
+        m_nLastFramesWritten = 0;
     }
 
     if (!m_queue.has_commands() && (int)m_queue.ms() > 1000*g_settings.nBufferedTime) {
@@ -446,7 +452,9 @@ void Player::Impl::run() {
                             m_log.info("New data after STOP message, reusing stream %llu", m_cStreamId);
                             bPrevPaused = m_bPaused;
                             m_nFramesBase = m_queue.front()->cTimestamp;
-                            m_cFramesWritten = m_nFramesBase;
+                            m_nFramesWritten = 0;
+                            m_nLastFramesBuffered = 0;
+                            m_nLastFramesWritten = 0;
                             continue;
                         }
                     }
@@ -478,6 +486,7 @@ void Player::Impl::run() {
 
                     m_pSink->recover(m_nLastError);
                     m_nLastError = 0;
+                    _set_frames_written(-1);
 
                     continue;
                 }
@@ -491,7 +500,8 @@ void Player::Impl::run() {
                         m_log.debug("%ld frames can be written", nFrames);
 
                         // Otherwise fill up initial portion.
-                        if (nFrames > 0 && m_cFramesWritten >= 2*m_pSink->get_period_size())
+                        if (nFrames > 0 && m_nLastFramesWritten >=
+                                (long)(2*m_pSink->get_period_size()))
                             nFrames = nFrames > (long)m_pSink->get_period_size() ?
                                     m_pSink->get_period_size() : nFrames;
 
@@ -514,7 +524,12 @@ void Player::Impl::run() {
                         }
 
                         _add_samples(nFrames);
-                        m_lastWrite = Clock::now();
+
+                        if (m_nFramesWritten >= 0) {
+                            m_lastWrite = Clock::now();
+                            m_nLastFramesWritten = m_nFramesWritten;
+                            m_nLastFramesBuffered = _get_buffered_frames();
+                        }
 
                         if (m_pSink->is_buffering() && !m_bPaused) {
                             m_log.info("Starting playback (delay: %ld)", _get_buffered_frames());
@@ -573,18 +588,10 @@ void Player::Impl::run() {
 bool Player::Impl::_handle_command(lansink::Packet_Kind _kind, Samples *_pPacket) {
     switch (_kind) {
         case lansink::Packet_Kind_PAUSE:
-            if (!m_bPaused) {
-                m_elapsed += Clock::now() - m_startTime;
-                m_startTime = TimePoint();
-            }
-
             m_bPaused = true;
             break;
 
         case lansink::Packet_Kind_START:
-            if (m_bPaused)
-                m_startTime = Clock::now();
-
             m_bPaused = false;
             break;
 
@@ -648,12 +655,15 @@ void Player::Impl::_add_silence(size_t _cFrames) {
             std::unique_ptr<char []> pBuf = std::unique_ptr<char []>(new char[cSilenceBytes]);
 
             memset(pBuf.get(), 0, cSilenceBytes);
-            cPosition += m_pSink->write(pBuf.get(), cSilenceFrames);
+            const long nWritten = m_pSink->write(pBuf.get(), cSilenceFrames);
+            cPosition += nWritten;
+            _add_frames_written(nWritten);
         } catch (Sink::Error &e) {
            if (e.is_underrun()) {
                MilliSeconds ms(std::chrono::duration_cast<MilliSeconds>(Clock::now() - m_lastWrite));
                m_log.warning("XRUN: write(), %d ms since last write", ms.count());
                m_pSink->prepare();
+               _set_frames_written(-1);
            } else
                throw;
         }
@@ -667,22 +677,39 @@ long Player::Impl::_get_available_frames(bool _bSync) const {
     return m_pSink->get_avail(_bSync);
 }
 
-long Player::Impl::_estimate_position() const {
-    Clock::duration position = m_elapsed;
+void Player::Impl::_add_frames_written(long _nFrames) {
+    if (m_nFramesWritten >= 0)
+        m_nFramesWritten += _nFrames;
+}
 
-    if (!m_bPaused)
-        position += (Clock::now() - m_startTime);
+void Player::Impl::_set_frames_written(long _nFrames) {
+    m_nFramesWritten = _nFrames;
+}
 
-    // FIXME pulse sink returns unrealistic delays (avail() results are even less realistic).
-    const long nDelay = _get_buffered_frames();
-    using Period = Clock::duration::period;
-    const long nPosition = nDelay + m_nFramesBase +
-            m_pSink->get_rate()*position.count()*Period::num/Period::den;
+long Player::Impl::_estimate_position() {
+    if (m_nFramesWritten < 0) {
+        const Clock::duration timeSince = Clock::now() - m_lastWrite;
+        using Period = Clock::duration::period;
+        const long nFramesSince =
+                m_pSink->get_rate()*timeSince.count()*Period::num/Period::den;
+        const long nFramesSinceXRun =
+                std::max<long>(0, nFramesSince - m_nLastFramesBuffered);
 
-    m_log.debug("Frames written = %lu, frames base = %ld, delay = %ld",
-            m_cFramesWritten, m_nFramesBase, nDelay);
+        m_log.debug("Estimated position after underrun: "
+                "frames since last write = %d, frames since xrun = %d, "
+                "last frames buffered = %ld, last frames written = %ld",
+                nFramesSince, nFramesSinceXRun, m_nLastFramesBuffered,
+                m_nLastFramesWritten);
 
-    return nPosition;
+        _set_frames_written(m_nLastFramesWritten + nFramesSinceXRun);
+    }
+
+    m_log.debug("Estimated position: frames base = %d, frames written = %d, "
+                "last frames buffered = %ld, last frames written = %ld",
+                m_nFramesBase, m_nFramesWritten, m_nLastFramesBuffered,
+                m_nLastFramesWritten);
+
+    return m_nFramesBase + m_nFramesWritten;
 }
 
 void Player::Impl::_add_samples(size_t _cFrames) {
@@ -717,13 +744,11 @@ void Player::Impl::_add_samples(size_t _cFrames) {
             }
 
             _add_silence(_cFrames);
-            m_cFramesWritten += _cFrames;
         }
 
         return;
     }
 
-    long nPosition = _estimate_position();
 
     // Work around latency introduced by program execution.
     const long c_nThreshold = m_pSink->get_period_size();
@@ -731,6 +756,7 @@ void Player::Impl::_add_samples(size_t _cFrames) {
     while (!m_queue.empty() && _cFrames > 0) {
         Samples *pSamples = m_queue.pop();
         const long nNext = pSamples->cTimestamp + pSamples->cOffset;
+        long nPosition = _estimate_position();
         const long nPacketDelay = nNext - nPosition;
 
         m_log.debug("Processing packet: timestamp = %d, offset = %lu, position = %ld, "
@@ -757,7 +783,6 @@ void Player::Impl::_add_samples(size_t _cFrames) {
 
             m_log.warning("Padding till %ld (%lu frames max)", nNext, _cFrames);
             _add_silence(cFrames);
-            m_cFramesWritten += cFrames;
             nPosition += cFrames;
             _cFrames -= cFrames;
 
@@ -790,14 +815,14 @@ void Player::Impl::_add_samples(size_t _cFrames) {
                     m_pSink->get_frame_bytes()), cWriteSize);
 
             pSamples->cOffset += cWritten;
-            m_cFramesWritten += cWritten;
+            _add_frames_written(cWritten);
             _cFrames -= cWritten;
-            nPosition += cWritten;
         } catch (Sink::Error &e) {
            if (e.is_underrun()) {
                MilliSeconds ms(std::chrono::duration_cast<MilliSeconds>(Clock::now() - m_lastWrite));
                m_log.warning("XRUN: write(), %d ms since last write", ms.count());
                m_pSink->prepare();
+               _set_frames_written(-1);
            } else {
                m_queue.push(pSamples);
                throw;
