@@ -99,26 +99,22 @@ public:
     virtual long write(const void *_pBuffer, unsigned long _cFrames);
 
 private:
-    snd_pcm_t *m_pPcm;
-    snd_pcm_uframes_t m_cBufferSize;
-    snd_pcm_uframes_t m_cPeriodSize;
-    size_t m_cChannelCount;
-    unsigned int m_cRate;
-    snd_pcm_format_t m_format;
-    size_t m_cFrameBytes;
+    snd_pcm_t *m_pPcm = nullptr;
+    snd_pcm_uframes_t m_cBufferSize = 2048;
+    snd_pcm_uframes_t m_cPeriodSize = 512;
+    size_t m_cChannelCount = 0;
+    unsigned int m_cRate = 0;
+    snd_pcm_format_t m_format = SND_PCM_FORMAT_UNKNOWN;
+    size_t m_cFrameBytes = 0;
     Log *m_pLog;
-    bool m_bReady;
-    bool m_bCanBePaused;
-    snd_pcm_sframes_t m_nBufferedFrames;
+    bool m_bReady = false;
+    bool m_bCanBePaused = false;
+    snd_pcm_sframes_t m_nBufferedFrames = 0;
 
     void _handle(alsa::Error &_e) const __attribute__((noreturn));
 };
 
-ALSASink::ALSASink(Log &_log) :
-    m_pPcm(nullptr), m_cBufferSize(2048), m_cPeriodSize(512), m_cChannelCount(0),
-    m_cRate(0), m_format(SND_PCM_FORMAT_UNKNOWN), m_cFrameBytes(0), m_pLog(&_log),
-    m_bReady(false), m_bCanBePaused(false), m_nBufferedFrames(0)
-{
+ALSASink::ALSASink(Log &_log) : m_pLog(&_log) {
 }
 
 ALSASink::~ALSASink() {

@@ -82,26 +82,26 @@ private:
     Sender *m_pPlug;
     std::vector<unsigned int> m_formatValues;
     std::string m_strFormat;
-    size_t m_cBitsPerSample;
-    size_t m_cChannels;
+    size_t m_cBitsPerSample = 0;
+    size_t m_cChannels = 0;
     std::thread m_worker;
     mutable std::mutex m_mutex;
-    int m_nSockWorker;
+    int m_nSockWorker = 0;
     mutable TimePoint m_startTime;
     TimePoint m_lastFrameTime;
-    mutable snd_pcm_sframes_t m_nLastFrames;
-    snd_pcm_sframes_t m_nFramesQueued;
-    snd_pcm_sframes_t m_nPointer;
+    mutable snd_pcm_sframes_t m_nLastFrames = 0;
+    snd_pcm_sframes_t m_nFramesQueued = 0;
+    snd_pcm_sframes_t m_nPointer = 0;
     std::list<std::string> m_queue;
     std::unique_ptr<char[]> m_pBuffer;
-    mutable Status m_status;
-    bool m_bPrepared;
-    int m_nSocket;
+    mutable Status m_status = Sender::usStopped;
+    bool m_bPrepared = false;
+    int m_nSocket = -1;
     static unsigned int s_cSeed;
     static std::default_random_engine s_randomEngine;
-    uint64_t m_cStreamId;
-    std::atomic_bool m_bStarted;
-    bool m_bDraining;
+    uint64_t m_cStreamId = 0;
+    std::atomic_bool m_bStarted{false};
+    bool m_bDraining = false;
     mutable WakeupDetector<Clock> m_wakeup;
 
     void _reset(bool _bResetStreamParams);
@@ -123,11 +123,7 @@ private:
 unsigned int Sender::Impl::s_cSeed = 0;
 std::default_random_engine Sender::Impl::s_randomEngine = std::default_random_engine();
 
-Sender::Impl::Impl(Sender *_pPlug) :
-    m_pPlug(_pPlug), m_strFormat(""), m_cBitsPerSample(0), m_cChannels(0),
-    m_nSockWorker(0), m_status(Sender::usStopped), m_nSocket(-1),
-    m_cStreamId(0), m_bStarted(false), m_bDraining(false)
-{
+Sender::Impl::Impl(Sender *_pPlug) : m_pPlug(_pPlug) {
     if (s_cSeed == 0) {
         try {
             std::random_device rd;

@@ -47,13 +47,13 @@ struct Samples {
     lansink::Packet_Kind kind;
     uint64_t cTimestamp;
     std::string data;
-    size_t cOffset;
+    size_t cOffset = 0;
     bool bRunning;
     bool bDraining;
 
     Samples(lansink::Packet &_packet) :
         kind(_packet.kind()), cTimestamp(_packet.timestamp()),
-        data(std::move(*_packet.mutable_samples())), cOffset(0),
+        data(std::move(*_packet.mutable_samples())),
         bRunning(_packet.kind() != lansink::Packet_Kind_CACHE),
         bDraining(_packet.kind() == lansink::Packet_Kind_DRAIN)
     {
@@ -122,13 +122,8 @@ constexpr long c_nBaseFramesAdjustmentThreshold = 10;
 class Player::Impl {
 public:
     Impl(uint64_t _cStreamId, Log &_log, const std::string &_strSender) :
-        m_pSink(create_alsa_sink(_log)), m_cStreamId(_cStreamId), m_nFramesWritten(-1),
-        m_nFramesBase(0), m_nLastFramesBuffered(0), m_nLastFramesWritten(0),
-        m_log(_log, LogDecorator{_strSender}),
-        m_bPaused(false), m_bEmulatedPause(false),
-        m_bClosed(false), m_bStarted(false), m_bDraining(false), m_nLastError(0),
-        m_averageDelay(c_cAveragePacketCount),
-        m_averageSize(c_cAveragePacketCount)
+        m_pSink(create_alsa_sink(_log)), m_cStreamId(_cStreamId),
+        m_log(_log, LogDecorator{_strSender})
     {
     }
 
@@ -156,22 +151,22 @@ private:
     Sink *m_pSink;
     uint64_t m_cStreamId;
     SampleQueue m_queue;
-    long m_nFramesWritten;
-    long m_nFramesBase;
-    long m_nLastFramesBuffered;
-    long m_nLastFramesWritten;
+    long m_nFramesWritten = -1;
+    long m_nFramesBase = 0;
+    long m_nLastFramesBuffered = 0;
+    long m_nLastFramesWritten = 0;
     std::thread m_worker;
     mutable std::mutex m_mutex;
     mutable DecoratedLog m_log;
-    bool m_bPaused;
-    bool m_bEmulatedPause;
-    bool m_bClosed;
-    bool m_bStarted;
-    bool m_bDraining;
+    bool m_bPaused = false;
+    bool m_bEmulatedPause = false;
+    bool m_bClosed = false;
+    bool m_bStarted = false;
+    bool m_bDraining = false;
     std::condition_variable m_dataAvailable;
-    int m_nLastError;
-    MovingAverage<long> m_averageDelay;
-    MovingAverage<long> m_averageSize;
+    int m_nLastError = 0;
+    MovingAverage<long> m_averageDelay{c_cAveragePacketCount};
+    MovingAverage<long> m_averageSize{c_cAveragePacketCount};
     LostPacketDetector m_lostPacketDetector;
     size_t m_cFramesPadding = 0;
     size_t m_cFramesSkipped = 0;
