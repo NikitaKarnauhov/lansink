@@ -40,63 +40,65 @@ class ALSASink : public Sink {
 public:
     ALSASink(Log &_log);
 
-    virtual ~ALSASink();
+    virtual ~ALSASink() override;
 
-    virtual bool is_prepared() const {
+    virtual bool is_prepared() const override {
         return m_pPcm != nullptr;
     }
 
-    virtual void init(size_t _cChannels, const size_t _cRate, const std::string &_strFormat);
-    virtual bool prepare();
-    virtual void pause(bool _bEnable);
+    virtual void init(size_t _cChannels, const size_t _cRate,
+            const std::string &_strFormat) override;
 
-    virtual unsigned long get_buffer_size() const {
+    virtual bool prepare() override;
+    virtual void pause(bool _bEnable) override;
+
+    virtual unsigned long get_buffer_size() const override {
         return m_cBufferSize;
     }
 
-    virtual unsigned long get_period_size() const {
+    virtual unsigned long get_period_size() const override {
         return m_cPeriodSize;
     }
 
-    virtual unsigned int get_rate() const {
+    virtual unsigned int get_rate() const override {
         return m_cRate;
     }
 
-    virtual unsigned int get_frame_bytes() const {
+    virtual unsigned int get_frame_bytes() const override {
         return m_cFrameBytes;
     }
 
-    virtual bool can_be_paused() const {
+    virtual bool can_be_paused() const override {
         return m_bCanBePaused;
     }
 
-    virtual long get_delay();
-    virtual long get_avail(bool _bSync);
-    virtual void recover(int _nError);
+    virtual long get_delay() override;
+    virtual long get_avail(bool _bSync) override;
+    virtual void recover(int _nError) override;
 
-    virtual void report_state() {
+    virtual void report_state() override {
         m_pLog->debug("State: %d", alsa::state(m_pPcm));
     }
 
-    virtual bool is_buffering() const {
+    virtual bool is_buffering() const override {
         return alsa::state(m_pPcm) == SND_PCM_STATE_PREPARED;
     }
 
-    virtual bool is_running() const {
+    virtual bool is_running() const override {
         return alsa::state(m_pPcm) == SND_PCM_STATE_RUNNING;
     }
 
-    virtual bool is_paused() const {
+    virtual bool is_paused() const override {
         return alsa::state(m_pPcm) == SND_PCM_STATE_PAUSED;
     }
 
-    virtual bool is_underrun() const {
+    virtual bool is_underrun() const override {
         return alsa::state(m_pPcm) == SND_PCM_STATE_XRUN;
     }
 
-    virtual void start();
-    virtual void close();
-    virtual long write(const void *_pBuffer, unsigned long _cFrames);
+    virtual void start() override;
+    virtual void close() override;
+    virtual long write(const void *_pBuffer, unsigned long _cFrames) override;
 
 private:
     snd_pcm_t *m_pPcm = nullptr;
