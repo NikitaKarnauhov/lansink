@@ -53,8 +53,8 @@ void sendto_all(int _cSock, const char *_pBuf, size_t _cLen, int _nFlags,
 template<typename _Sample = int, typename _Mean = double>
 class MovingAverage {
 public:
-    typedef _Mean Mean;
-    typedef _Sample Sample;
+    using Mean = _Mean;
+    using Sample = _Sample;
 
     MovingAverage(size_t _cSize) : m_cSize(_cSize), m_fMean(0) {
         assert(_cSize <= m_samples.max_size());

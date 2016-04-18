@@ -55,7 +55,7 @@
 
 class Sender::Impl {
 public:
-    typedef Sender::Status Status;
+    using Status = Sender::Status;
 
     Impl(Sender *_pPlug);
     ~Impl();

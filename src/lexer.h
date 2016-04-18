@@ -97,8 +97,8 @@ private:
     class IteratorImpl;
 
 public:
-    typedef std::set<Token> Tokens;
-    typedef TokenIterator<IteratorImpl> iterator;
+    using Tokens = std::set<Token>;
+    using iterator = TokenIterator<IteratorImpl>;
 
     Lexer(std::wistream &_is);
     int define(const std::wstring &_s);

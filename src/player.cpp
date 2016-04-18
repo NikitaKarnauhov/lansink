@@ -178,7 +178,7 @@ private:
 
     TimePoint m_lastWrite, m_reportTime, m_xrunTime;
 
-    typedef std::map<uint64_t, Player *> Players;
+    using Players = std::map<uint64_t, Player *>;
     static Players s_players;
     static std::mutex s_playerMapMutex;
 

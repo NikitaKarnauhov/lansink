@@ -334,7 +334,7 @@ snd_pcm_state_t alsa::state(snd_pcm_t *_pPcm) {
     return snd_pcm_state(_pPcm);
 }
 
-typedef std::map<std::string, snd_pcm_format_t> Formats;
+using Formats = std::map<std::string, snd_pcm_format_t>;
 
 static const Formats g_formats{
     // Signed 8 bit.

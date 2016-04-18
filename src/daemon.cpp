@@ -264,9 +264,9 @@ void _main(Log &_log, bool &_bPIDWritten) {
     auto pBuf = std::unique_ptr<char[]>(new char[cBufferSize]);
     std::list<lansink::Packet> packets;
 
-    typedef std::chrono::steady_clock Clock;
-    typedef std::chrono::duration<int, std::milli> Duration;
-    typedef std::chrono::time_point<Clock> TimePoint;
+    using Clock = std::chrono::steady_clock;
+    using Duration = std::chrono::duration<int, std::milli>;
+    using TimePoint = std::chrono::time_point<Clock>;
     TimePoint m_lastOpenAttempt;
 
     do {
