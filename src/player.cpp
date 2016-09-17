@@ -880,6 +880,14 @@ void Player::Impl::_add_samples(size_t _cFrames) {
             const size_t cWritten = m_pSink->write(pSamples->get_data(
                     m_pSink->get_frame_bytes()), cWriteSize);
 
+            if (cWritten == 0) {
+                const auto seconds(std::chrono::duration_cast<std::chrono::seconds>(
+                        Clock::now() - m_lastWrite));
+                if (seconds.count() > g_settings.nRecoveryTimeout)
+                    throw Sink::Error(Sink::Error::seUnderrun, 0,
+                            "sink doesn't accept data");
+            }
+
             pSamples->cOffset += cWritten;
             _add_frames_written(cWritten);
             _cFrames -= cWritten;
