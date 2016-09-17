@@ -231,7 +231,7 @@ void SampleQueue::push(lansink::Packet &_packet, bool _bPaused) {
 void SampleQueue::push(Samples *_pSamples) {
     if (_pSamples->kind == lansink::Packet_Kind_DATA)
         m_cTotalBytes += _pSamples->data.size();
-	Base::insert(_pSamples);
+    Base::insert(_pSamples);
 }
 
 void SampleQueue::clear() {
