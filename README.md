@@ -110,7 +110,7 @@ playing audo from network, e.g. with Flash Player from your browser.
 
 ## Using PulseAudio on receiver side
 
-PulseAudio can also be used on receiver in order to mix streams and covert
+PulseAudio can also be used on receiver in order to mix streams and convert
 audio formats to ones supported by hardware. You will need to install 'pulse'
 plugin for ALSA. On Fedora run:
 
