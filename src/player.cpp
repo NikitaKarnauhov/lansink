@@ -697,6 +697,7 @@ void Player::Impl::_add_silence(size_t _cFrames) {
         return;
 
     size_t cPosition = 0;
+    bool bUnderrunHandled = false;
 
     m_log.debug("Inserting silence: %lu frames", _cFrames);
 
@@ -709,14 +710,19 @@ void Player::Impl::_add_silence(size_t _cFrames) {
 
             memset(pBuf.get(), 0, cSilenceBytes);
             const long nWritten = m_pSink->write(pBuf.get(), cSilenceFrames);
+
+            if (nWritten == 0)
+                throw Sink::Error(Sink::Error::seUnderrun, 0, "sink doesn't accept data");
+
             cPosition += nWritten;
             _add_frames_written(nWritten);
         } catch (Sink::Error &e) {
-           if (e.is_underrun()) {
+           if (!bUnderrunHandled && e.is_underrun()) {
                MilliSeconds ms(std::chrono::duration_cast<MilliSeconds>(Clock::now() - m_lastWrite));
                m_log.warning("XRUN: write(), %d ms since last write", ms.count());
                m_pSink->prepare();
                _set_frames_written(-1);
+               bUnderrunHandled = true;
            } else
                throw;
         }
